@@ -1,0 +1,41 @@
+name: CI Pipeline - Demand Tracker
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test-and-lint:
+    name: Teste e Lint
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 1. Checkout do código
+      uses: actions/checkout@v3
+
+    - name: 2. Configurar Python 3.9
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.9
+
+    - name: 3. Instalar dependências
+      run: |
+        python -m pip install --upgrade pip
+        # Instala dependências de teste e da aplicação
+        pip install -r requirements.txt
+        pip install pytest flake8
+
+    - name: 4. Análise estática com Flake8
+      run: |
+        # --count: mostra o total de erros
+        # --select: seleciona erros específicos para falhar o build (erros de sintaxe/lógica)
+        # --statistics: mostra contagem de cada tipo de erro
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+    - name: 5. Executar testes com Pytest
+      run: |
+        # Adiciona o diretório raiz ao PYTHONPATH para que os imports funcionem
+        export PYTHONPATH=$PYTHONPATH:$(pwd)
+        pytest tests/

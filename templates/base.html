@@ -1,0 +1,73 @@
+{% include 'head.html' %}
+
+<body>
+  <div class="site-wrapper">
+    <div class="app-container">
+      {% include '_sidebar.html' %}
+      <main class="main-content min-w-0 min-h-0">
+        {% include '_mainheader.html' %}
+        <div class="content-area">
+          <div class="content-area-inner-bordered">
+            {% block content %}{% endblock %}
+          </div>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="fixed top-5 right-5 z-[100] space-y-2 w-full max-w-sm">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="toast-item opacity-0 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-4 flex items-start border-l-4
+                    {% if category == 'success' %} border-green-500
+                    {% elif category == 'danger' or category == 'error' %} border-red-500
+                    {% elif category == 'warning' %} border-yellow-500
+                    {% else %} border-blue-500 {% endif %}"
+                    role="alert">
+                    <div class="flex-grow">
+                        <p class="font-semibold
+                            {% if category == 'success' %} text-green-700 dark:text-green-300
+                            {% elif category == 'danger' or category == 'error' %} text-red-700 dark:text-red-300
+                            {% elif category == 'warning' %} text-yellow-700 dark:text-yellow-300
+                            {% else %} text-blue-700 dark:text-blue-300 {% endif %}">
+                            {% if category == 'success' %}Sucesso
+                            {% elif category == 'danger' or category == 'error' %}Erro
+                            {% elif category == 'warning' %}Aviso
+                            {% else %}Informação{% endif %}
+                        </p>
+                        <p class="text-sm text-gray-600 dark:text-gray-200 mt-1">{{ message }}</p>
+                    </div>
+                    <button type="button" class="toast-close-btn ml-4 -mr-1 -mt-1 p-1 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 focus:outline-none">
+                        <i class="ph ph-x pointer-events-none"></i>
+                    </button>
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+  </div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const toasts = Array.from(document.querySelectorAll('.toast-item'));
+      toasts.forEach((toast, index) => {
+        const removeToast = () => {
+          toast.classList.add('toast-fade-out');
+          toast.addEventListener('animationend', () => toast.remove(), { once: true });
+        };
+        const autoRemoveTimer = setTimeout(removeToast, 5000 + (index * 200));
+        toast.querySelector('.toast-close-btn').addEventListener('click', () => {
+          clearTimeout(autoRemoveTimer);
+          removeToast();
+        });
+        toast.classList.add('toast-fade-in');
+      });
+    });
+  </script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

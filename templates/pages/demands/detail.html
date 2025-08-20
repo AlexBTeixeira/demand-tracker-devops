@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<form action="{{ url_for('demands.save_demand') }}" method="POST" enctype="multipart/form-data">
+    <input type="hidden" name="demand_id" value="{{ demand.id if demand else '' }}">
+    
+    <div class="flex justify-between items-center mb-6">
+        <h1 class="text-2xl font-semibold">{{ 'Editar Demanda' if demand else 'Nova Demanda' }}</h1>
+        <div class="flex items-center gap-4">
+            <a href="{{ url_for('demands.dashboard') }}" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg">
+                Cancelar
+            </a>
+            <button type="submit" class="bg-meu-azul-padrao hover:bg-meu-azul-hover text-white font-bold py-2 px-4 rounded-lg">
+                Salvar Demanda
+            </button>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Main demand info -->
+        <div class="md:col-span-2 space-y-6 bg-white p-6 rounded-lg shadow-sm">
+            <div>
+                <label for="title" class="block text-sm font-medium text-gray-700">Título</label>
+                <input type="text" name="title" id="title" value="{{ demand.title if demand else '' }}" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+            </div>
+            <div>
+                <label for="description" class="block text-sm font-medium text-gray-700">Descrição</label>
+                <textarea name="description" id="description" rows="10" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">{{ demand.description if demand else '' }}</textarea>
+            </div>
+        </div>
+
+        <!-- Sidebar info -->
+        <div class="space-y-6 bg-white p-6 rounded-lg shadow-sm">
+            <div>
+                <label for="status" class="block text-sm font-medium text-gray-700">Status</label>
+                <select name="status" id="status" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                    {% set statuses = ['Em Fila', 'Em Execução', 'Pausada', 'Concluída', 'Cancelada'] %}
+                    {% for s in statuses %}
+                        <option value="{{ s }}" {% if demand and demand.status == s %}selected{% endif %}>{{ s }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label for="estimated_hours" class="block text-sm font-medium text-gray-700">Horas Estimadas</label>
+                <input type="number" step="0.1" name="estimated_hours" id="estimated_hours" value="{{ demand.estimated_hours if demand and demand.estimated_hours is not none else '' }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+            </div>
+             <div>
+                <label for="executed_hours" class="block text-sm font-medium text-gray-700">Horas Executadas</label>
+                <input type="text" name="executed_hours" value="{{ '%.2f'|format(demand.executed_hours) if demand else '0.00' }}h" readonly class="mt-1 block w-full rounded-md border-gray-300 bg-gray-100 shadow-sm">
+            </div>
+            <div>
+                <label for="attachments" class="block text-sm font-medium text-gray-700">Anexos</label>
+                <input type="file" name="attachments" id="attachments" multiple class="mt-1 block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                {% if attachments %}
+                <div class="mt-4 space-y-2">
+                    <p class="text-xs font-semibold">Arquivos existentes:</p>
+                    {% for att in attachments %}
+                    <a href="{{ url_for('demands.download_attachment', attachment_id=att.id) }}" class="text-xs text-blue-600 hover:underline block">{{ att.filename }}</a>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</form>
+
+{% if demand %}
+<div class="mt-8 bg-white p-6 rounded-lg shadow-sm">
+    <h2 class="text-xl font-semibold mb-4">Histórico de Trabalho</h2>
+    <div class="max-h-96 overflow-y-auto">
+        <table class="w-full text-sm text-left">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="p-2">Início</th>
+                    <th class="p-2">Fim</th>
+                    <th class="p-2">Tempo Gasto</th>
+                    <th class="p-2">Descrição</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in work_history %}
+                <tr class="border-b">
+                    <td class="p-2">{{ log.start_time.strftime('%d/%m/%Y %H:%M') }}</td>
+                    <td class="p-2">{{ log.end_time.strftime('%d/%m/%Y %H:%M') }}</td>
+                    <td class="p-2">{{ log.minutes_spent }} min</td>
+                    <td class="p-2 text-xs">{{ log.description | safe }}</td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" class="text-center p-4 text-gray-500">Nenhum registro de trabalho para esta demanda.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

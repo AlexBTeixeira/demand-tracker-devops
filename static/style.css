@@ -1,0 +1,382 @@
+/* ==========================================================================
+   1. RESET BÁSICO E VARIÁVEIS GLOBAIS
+   ========================================================================== */
+   :root {
+    /* Cores Tema Claro */
+    --primary-color: #0a3147; /* Azul PUCRS (Exemplo, ajuste) */
+    --primary-color-rgb: 0, 82, 204;
+    --primary-color-light: #e6f0ff; /* Um azul bem claro para fundos ativos/hover */
+    --secondary-color: #505f79; /* Cinza azulado para texto secundário */
+    --success-color: #00875a;
+    --success-color-light: #e3fcef;
+    --danger-color: #de350b;
+    --danger-color-light: #ffebe6;
+    --warning-color: #ffab00;
+    --warning-color-light: #fff0b3;
+  
+    --light-bg: #f4f5f7; /* Fundo principal da aplicação (cinza muito claro) */
+    --white-bg: #ffffff; /* Fundo para cards, sidebar, header */
+    --grey-bg: #f9fafb; /* Fundo para hover sutil, cabeçalho de tabela */
+    --border-color: #dfe1e6; /* Cor de borda padrão */
+  
+    --text-color: #172b4d; /* Cor de texto principal (quase preto) */
+    --text-light: #000000; /* Cor de texto mais clara, para descrições, placeholders */
+    --text-on-primary: #ffffff; /* Texto sobre fundos da cor primária */
+  
+    /* Cores Tema Escuro (Exemplos, ajuste conforme necessário) */
+    --dark-primary-color: #579dff;
+    --dark-primary-color-rgb: 87, 157, 255;
+    --dark-primary-color-light: #2c3e50;
+    --dark-secondary-color: #9fb1cc;
+    --dark-success-color: #28a745;
+    --dark-success-color-light: #223a2c;
+    --dark-danger-color: #e74c3c;
+    --dark-danger-color-light: #4a2a2a;
+  
+    --dark-light-bg: #161a1d; /* Fundo principal escuro */
+    --dark-white-bg: #1f2327; /* Fundo de cards escuro */
+    --dark-grey-bg: #2c3136; /* Hover sutil escuro */
+    --dark-border-color: #40454a;
+  
+    --dark-text-color: #e1e8f0;
+    --dark-text-light: #a0aec0;
+    --dark-text-on-primary: #ffffff;
+  
+    /* Dimensões e Fontes */
+    --sidebar-width: 220px;
+    --header-height: 70px;
+    --font-family: "Inter", "Arial", sans-serif;
+    --base-font-size: 17px;
+    --border-radius-sm: 4px;
+    --border-radius-md: 8px;
+    --border-radius-lg: 12px;
+    --image-h-size: 75px;
+  }
+
+
+  body {
+      margin: 0;
+      font-family: var(--font-family);
+      background-color: var(--light-bg);
+      color: var(--text-color);
+      font-size: var(--base-font-size);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      transition: background-color 0.3s ease, color 0.3s ease;
+  
+  
+  }
+  
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+  
+  a {
+    text-decoration: none;
+    color: var(--primary-color);
+    transition: color 0.2s ease;
+  }
+  a:hover {
+    color: var(
+      --dark-primary-color
+    ); /* Ou uma variação mais escura/clara da primary */
+  }
+
+  
+  img {
+    max-width: 115% !important;
+    height: auto;
+    display: block;
+  }
+  
+
+  
+  /* ==========================================================================
+     2. LAYOUT PRINCIPAL (APP CONTAINER)
+     ========================================================================== */
+  .app-container {
+    display: flex; /* Makes it a flex container */
+    height: 100vh; /* Garante que ocupe toda a altura da viewport */
+
+  }
+  
+  /* ==========================================================================
+     3. SIDEBAR
+     ========================================================================== */
+  .sidebar {
+    width: var(--sidebar-width);
+    background-color: var(--white-bg);
+    border-right: 1px solid var(--border-color);
+    padding: 20px 0;
+    display: flex;
+    flex-direction: column;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+    flex-shrink: 0; /* ADD THIS LINE: Prevents the sidebar from shrinking */
+  }
+  .sidebar-header {
+    padding: 15px 0px 25px 0px; /* Ajustado */
+    margin-bottom: 10px;
+    display: flex;
+    justify-content: center;
+  }
+  
+  .sidebar-header .logo {
+    height: var(--image-h-size); /* Ajuste conforme seu logo */
+  }
+  
+  /* ----------------------------- Sidebar Navigation ----------------------------- */
+  .sidebar-nav {
+    padding: 0 15px; /* Padding lateral para os itens de navegação */
+    flex-grow: 1;
+    overflow-y: auto;
+  }
+  
+  .sidebar-nav ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+  
+  .sidebar-nav li {
+    margin-bottom: 6px;
+  }
+  
+  .sidebar-nav li a {
+    display: flex;
+    align-items: center;
+    padding: 10px 15px;
+    color: var(--text-light);
+    border-radius: var(--border-radius-md);
+    transition: background-color 0.2s ease, color 0.2s ease;
+    font-size: 0.95em;
+  }
+  
+  .sidebar-nav li a:hover {
+    background-color: var(--grey-bg);
+    color: var(--primary-color);
+  }
+  .sidebar-nav li.active > a {
+    background-color: var(--primary-color-light);
+    color: var(--primary-color);
+    font-weight: 600;
+  }
+  
+  /* Conteúdo do item de menu (seta/espaçador + ícone principal + texto) */
+  .sidebar-nav .menu-item-content {
+    display: flex;
+    align-items: center;
+    flex-grow: 1;
+    justify-content: flex-start; /* ADICIONADO para garantir alinhamento dos filhos à esquerda */
+  }
+  
+  /* Ícone da seta (real) e espaçador (para alinhamento) */
+  .sidebar-nav .arrow-icon,
+  .sidebar-nav .arrow-spacer {
+    font-size: 0.9em;
+    width: 24px;
+    min-width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 8px;
+    color: var(--text-light);
+    transition: transform 0.25s ease, color 0.2s ease;
+  }
+  .sidebar-nav .arrow-icon {
+    cursor: pointer;
+  }
+  .sidebar-nav li a:hover .arrow-icon {
+    color: var(--primary-color);
+  }
+  .sidebar-nav .arrow-icon.open {
+    transform: rotate(90deg);
+  }
+  
+  /* Ícone principal do menu */
+  .sidebar-nav .menu-icon-main {
+    font-size: 1.3em;
+    margin-right: 12px;
+    color: var(--text-light);
+    width: 20px;
+    text-align: center;
+    transition: color 0.2s ease;
+  }
+  .sidebar-nav li a:hover .menu-icon-main,
+  .sidebar-nav li.active > a .menu-icon-main {
+    color: var(--primary-color);
+  }
+  
+  /* Texto do item de menu */
+  .sidebar-nav .menu-item-content span {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  
+
+  /* ==========================================================================
+     4. MAIN CONTENT AREA
+     ========================================================================== */
+  .main-content {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--light-bg);
+    transition: background-color 0.3s ease;
+    overflow-y: auto; /* ADICIONADO */
+  }
+  
+  /* ----------------------------- Main Header ----------------------------- */
+  .main-header {
+    height: var(--header-height) !important;
+    flex-shrink: 0; /* Garante que o header não encolha, mesmo se houver pressão de espaço */
+    background-color: var(--white-bg);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 25px;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+  }
+  
+
+
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+  }
+  
+
+ 
+
+  
+  
+  /* ----------------------------- Content Area Proper ----------------------------- */
+  .content-area {
+    padding: 25px 30px;
+    flex-grow: 1;
+    /* overflow-y: auto; */ /* REMOVIDO */
+  }
+  
+  .content-area-inner-bordered {
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-lg);
+    background-color: var(--white-bg);
+    padding: 20px 25px;
+    box-shadow: 0 2px 8px rgba(23, 43, 77, 0.07);
+    transition: background-color 0.3s ease, border-color 0.3s ease,
+      box-shadow 0.3s ease;
+  }
+  /* Toolbar dentro do conteúdo */
+  .content-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+  
+  .toolbar-left {
+    display: flex;
+    gap: 10px;
+  }
+  .toolbar-left .btn.btn-icon {
+    background-color: var(--white-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-light);
+    padding: 7px 10px;
+    border-radius: var(--border-radius-md);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 0.9em;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .toolbar-left .btn.btn-icon i.ph {
+    font-size: 1.2em;
+  }
+  .toolbar-left .btn.btn-icon:hover {
+    background-color: var(--grey-bg);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+  }
+  
+  .content-toolbar .search-bar input {
+    min-width: 250px;
+  }
+  
+
+  
+ 
+  
+  /* ==========================================================================
+     6. AJUSTES RESPONSIVOS (BÁSICO - EXPANDIR CONFORME NECESSÁRIO)
+     ========================================================================== */
+  @media (max-width: 768px) {
+    .sidebar {
+      width: 100%;
+      position: fixed;
+      left: -100%;
+      z-index: 1000;
+      transition: left 0.3s ease;
+    }
+    .sidebar.open {
+      /* Você precisaria de JS para adicionar/remover esta classe */
+      left: 0;
+    }
+    .main-header {
+      padding: 0 15px;
+    }
+    .header-actions .search-bar {
+      display: none;
+    }
+    .content-area {
+      padding: 15px;
+    }
+    .content-area-inner-bordered {
+      padding: 15px;
+    }
+    .content-toolbar {
+      flex-direction: column;
+      gap: 15px;
+    }
+    .content-toolbar .search-bar input {
+      width: 100%;
+    }
+  }
+  
+  /* em style.css */
+  .content-area-inner-bordered {
+    /* Mantenha o que já está aqui, apenas adicione a fonte-size se necessário.
+         O font-size não está diretamente relacionado ao dark mode, mas se quiser,
+         pode mantê-lo. Se ele está atrapalhando outros elementos, considere remover
+         o !important ou ajustá-lo de forma mais granular. */
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-lg);
+    background-color: var(--white-bg);
+    padding: 20px 25px;
+    box-shadow: 0 2px 8px rgba(23, 43, 77, 0.07);
+    transition: background-color 0.3s ease, border-color 0.3s ease,
+      box-shadow 0.3s ease;
+    font-size: 15px !important;
+  }
+  
+  .icon-action {
+    display: inline-block;
+    text-decoration: none;
+    padding: 4px;
+  }
+  .icon-action .ph {
+    font-size: 1.2em;
+  }
+  .icon-action:hover .ph {
+    color: #232526;
+    cursor: pointer;
+  }
+  

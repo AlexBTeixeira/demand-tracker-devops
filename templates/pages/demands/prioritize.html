@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto">
+    <div class="text-center mb-8">
+        <h1 class="text-2xl font-semibold">Priorize a Nova Demanda</h1>
+        <p class="text-gray-600 dark:text-gray-400">Arraste a nova demanda (destacada em azul) para a posição desejada na fila.</p>
+    </div>
+
+    <div id="new-demand-priority-list" class="space-y-3">
+        {% for demand in demands %}
+        <div class="demand-list-item bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm flex items-center gap-4 cursor-grab
+            {% if demand.id == new_demand_id %}border-2 border-blue-500{% endif %}"
+            data-id="{{ demand.id }}">
+            <span class="text-lg font-bold text-gray-400 dark:text-gray-500">{{ loop.index }}</span>
+            <div class="flex-grow">
+                <h3 class="font-semibold">{{ demand.title }}</h3>
+            </div>
+            <span class="text-xs font-semibold px-2 py-1 rounded-full
+                {% if demand.status == 'Em Fila' %}bg-gray-200 text-gray-800
+                {% elif demand.status == 'Em Execução' %}bg-blue-200 text-blue-800
+                {% endif %}">
+                {{ demand.status }}
+            </span>
+        </div>
+        {% endfor %}
+    </div>
+    
+    <div class="mt-8 text-center">
+        <a href="{{ url_for('demands.dashboard') }}" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded-lg">
+            Concluir
+        </a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const container = document.getElementById('new-demand-priority-list');
+    if (container) {
+        new Sortable(container, {
+            animation: 150,
+            handle: '.demand-list-item', 
+            onEnd: function (evt) {
+                const orderedIds = Array.from(container.children).map(item => item.dataset.id);
+                fetch("{{ url_for('demands.update_priorities') }}", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ordered_ids: orderedIds })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status !== 'success') {
+                        alert('Erro ao salvar a nova ordem de prioridade.');
+                    } else {
+                        // Atualiza os números da lista sem recarregar a página
+                        const items = container.querySelectorAll('.demand-list-item');
+                        items.forEach((item, index) => {
+                            const numberSpan = item.querySelector('span:first-child');
+                            if (numberSpan) {
+                                numberSpan.textContent = index + 1;
+                            }
+                        });
+                    }
+                })
+                .catch(err => console.error('Falha ao salvar prioridades:', err));
+            },
+        });
+    }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,36 @@
+<aside class="sidebar">
+    <div class="sidebar-header">
+      <span class="text-md text-center font-bold ">DEMAND TRACKER</span>
+  </div>
+  <nav class="sidebar-nav">
+    <ul>
+      <li class="{% if request.endpoint.startswith('demands') %}active{% endif %}">
+        <a href="{{ url_for('demands.dashboard') }}">
+          <div class="menu-item-content">
+            <i class="ph ph-kanban menu-icon-main"></i>
+            <span>Demandas</span>
+          </div>
+        </a>
+      </li>
+      <li class="{% if request.endpoint.startswith('tracker') %}active{% endif %}">
+        <a href="{{ url_for('tracker.index') }}">
+          <div class="menu-item-content">
+            <i class="ph ph-timer menu-icon-main"></i>
+            <span>Registrar Horas</span>
+          </div>
+        </a>
+      </li>
+      <li class="{% if request.endpoint.startswith('reports') %}active{% endif %}">
+        <a href="{{ url_for('reports.index') }}">
+          <div class="menu-item-content">
+            <i class="ph ph-chart-bar menu-icon-main"></i>
+            <span>Relatórios</span>
+          </div>
+        </a>
+      </li>
+    </ul>
+  </nav>
+    <div class="sidebar-header">
+    <img src="/static/images/planicon1.png" class="logo h-10">
+  </div>
+</aside>

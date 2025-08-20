@@ -1,0 +1,11 @@
+<header class="main-header">
+  <nav class="breadcrumbs" aria-label="breadcrumb">
+    {# Breadcrumbs can be populated in each view if needed #}
+  </nav>
+  <div class="header-actions">
+    <span class="text-sm font-semibold mr-4">Olá, Usuario</span>
+    <button class="theme-toggle" aria-label="Sair" onclick="window.location.href='{{ url_for('auth.logout') }}'">
+      <i class="ph ph-sign-out"></i>
+    </button>
+</div>
+</header>

@@ -1,0 +1,356 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="flex flex-col items-center justify-center h-full text-center">
+    <h1 class="text-3xl font-semibold mb-4">Registro de Horas</h1>
+    <p class="text-gray-500 dark:text-gray-400 mb-8 max-w-lg">O cronômetro continuará rodando mesmo se você fechar esta página.</p>
+
+    <!-- Timer Display -->
+    <div id="timer-display" class="text-8xl font-mono font-bold mb-8 text-gray-800 dark:text-gray-200">00:00:00</div>
+
+    <!-- Controls -->
+    <div id="timer-controls" class="flex gap-6">
+        <button id="start-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold text-xl py-4 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105">
+            <i class="ph ph-play"></i> Iniciar Trabalho
+        </button>
+        <button id="pause-btn" class="hidden bg-yellow-500 hover:bg-yellow-600 text-white font-bold text-xl py-4 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105">
+            <i class="ph ph-pause"></i> Pausar
+        </button>
+        <button id="resume-btn" class="hidden bg-green-600 hover:bg-green-700 text-white font-bold text-xl py-4 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105">
+            <i class="ph ph-play"></i> Retomar
+        </button>
+        <button id="stop-btn" class="hidden bg-red-600 hover:bg-red-700 text-white font-bold text-xl py-4 px-8 rounded-full shadow-lg transition-transform transform hover:scale-105">
+            <i class="ph ph-stop"></i> Finalizar
+        </button>
+    </div>
+</div>
+
+<!-- Work Log Modal -->
+<section id="work-log-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 hidden">
+    <div class="modal-content bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full p-6 space-y-4">
+        <div class="flex justify-between items-center border-b pb-3 dark:border-gray-600">
+            <h2 class="text-xl font-semibold">Registrar Trabalho Realizado</h2>
+        </div>
+        
+        <div class="text-center my-4">
+            <p class="text-gray-600 dark:text-gray-300">Tempo Total Trabalhado:</p>
+            <p id="total-time-worked" class="text-4xl font-bold"></p>
+            <p id="remaining-time" class="text-sm text-red-600 mt-1"></p>
+        </div>
+        
+        <form id="work-log-form" class="space-y-4">
+            <div id="allocations-container" class="space-y-4 max-h-64 overflow-y-auto pr-2">
+                <!-- Allocation rows will be added here by JS -->
+            </div>
+            
+            <div class="flex justify-start">
+                <button type="button" id="add-allocation-btn" class="text-sm bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-2 px-4 rounded-lg flex items-center gap-2 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600">
+                    <i class="ph ph-plus-circle"></i> Adicionar Rateio de Demanda
+                </button>
+            </div>
+            
+            <div class="flex justify-end items-center gap-4 pt-4 border-t dark:border-gray-600">
+                <button type="button" id="cancel-log-btn" class="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg dark:bg-gray-600 dark:text-gray-200 dark:hover:bg-gray-500">Descartar</button>
+                <button type="submit" id="submit-log-btn" class="bg-meu-azul-padrao hover:bg-meu-azul-hover text-white font-bold py-2 px-4 rounded-lg">Salvar Registro</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<!-- Template for allocation row -->
+<template id="allocation-row-template">
+    <div class="allocation-row grid grid-cols-12 gap-x-4 gap-y-3 border p-3 rounded-lg bg-gray-50 dark:bg-gray-700 dark:border-gray-600">
+        
+        <!-- Top Row for Inputs -->
+        <div class="col-span-12 md:col-span-7">
+            <label class="block text-xs font-medium text-gray-600 dark:text-gray-300">Demanda</label>
+            <select name="demand_id" class="demand-select mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm dark:bg-gray-900 dark:border-gray-600" required>
+                <option value="">Selecione...</option>
+                {% for demand in pending_demands %}
+                <option value="{{ demand.id }}">{{ demand.title }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-span-6 md:col-span-2">
+            <label class="block text-xs font-medium text-gray-600 dark:text-gray-300">Tempo (min)</label>
+            <input type="number" name="minutes_spent" min="1" required class="minutes-input mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm dark:bg-gray-900 dark:border-gray-600">
+        </div>
+        <div class="col-span-6 md:col-span-3">
+            <label class="block text-xs font-medium text-gray-600 dark:text-gray-300">Novo Status</label>
+            <select name="new_status" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm dark:bg-gray-900 dark:border-gray-600">
+                <option value="">Manter Status</option>
+                <option value="Em Execução">Em Execução</option>
+                <option value="Concluída">Concluída</option>
+                <option value="Pausada">Pausada</option>
+            </select>
+        </div>
+
+        <!-- Bottom Row for Description -->
+        <div class="col-span-12 flex items-end gap-2">
+            <div class="flex-grow">
+                <label class="block text-xs font-medium text-gray-600 dark:text-gray-300">Descrição do Trabalho</label>
+                <textarea name="description" required rows="2" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm dark:bg-gray-900 dark:border-gray-600" placeholder="Descreva as atividades realizadas..."></textarea>
+            </div>
+            <button type="button" class="remove-allocation-btn text-red-500 hover:text-red-700 shrink-0 pb-1"><i class="ph ph-trash text-xl"></i></button>
+        </div>
+
+    </div>
+</template>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    // --- ELEMENT REFERENCES ---
+    const timerDisplay = document.getElementById('timer-display');
+    const startBtn = document.getElementById('start-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const pauseBtn = document.getElementById('pause-btn');
+    const resumeBtn = document.getElementById('resume-btn');
+    
+    const workLogModal = document.getElementById('work-log-modal');
+    const totalTimeWorkedDisplay = document.getElementById('total-time-worked');
+    const remainingTimeDisplay = document.getElementById('remaining-time');
+    const addAllocationBtn = document.getElementById('add-allocation-btn');
+    const allocationsContainer = document.getElementById('allocations-container');
+    const workLogForm = document.getElementById('work-log-form');
+    const cancelLogBtn = document.getElementById('cancel-log-btn');
+    
+    let timerInterval;
+
+    // --- UTILITY FUNCTIONS ---
+    const formatTime = (totalSeconds) => {
+        const h = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
+        const m = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
+        const s = Math.floor(totalSeconds % 60).toString().padStart(2, '0');
+        return `${h}:${m}:${s}`;
+    };
+
+    // --- UI UPDATE FUNCTIONS ---
+    const updateUI = (state) => {
+        startBtn.classList.toggle('hidden', state !== 'stopped');
+        stopBtn.classList.toggle('hidden', state === 'stopped');
+        pauseBtn.classList.toggle('hidden', state !== 'running');
+        resumeBtn.classList.toggle('hidden', state !== 'paused');
+        timerDisplay.classList.toggle('animate-pulse', state === 'paused');
+    };
+
+    const updateTimerDisplay = () => {
+        const startTime = parseInt(localStorage.getItem('startTime'), 10);
+        const pauseTime = parseInt(localStorage.getItem('pauseTime'), 10);
+        if (!startTime) return;
+
+        if (pauseTime) { // Timer is paused
+            const elapsed = (pauseTime - startTime) / 1000;
+            timerDisplay.textContent = formatTime(elapsed);
+        } else { // Timer is running
+            const now = Date.now();
+            const elapsed = (now - startTime) / 1000;
+            timerDisplay.textContent = formatTime(elapsed);
+        }
+    };
+
+    // --- TIMER LOGIC ---
+    const startWork = () => {
+        localStorage.setItem('startTime', Date.now());
+        updateUI('running');
+        timerInterval = setInterval(updateTimerDisplay, 1000);
+    };
+
+    const pauseWork = () => {
+        clearInterval(timerInterval);
+        localStorage.setItem('pauseTime', Date.now());
+        updateUI('paused');
+    };
+
+    const resumeWork = () => {
+        const savedStartTime = parseInt(localStorage.getItem('startTime'), 10);
+        const savedPauseTime = parseInt(localStorage.getItem('pauseTime'), 10);
+        
+        const pausedDuration = Date.now() - savedPauseTime;
+        const newStartTime = savedStartTime + pausedDuration;
+
+        localStorage.setItem('startTime', newStartTime);
+        localStorage.removeItem('pauseTime');
+
+        updateUI('running');
+        timerInterval = setInterval(updateTimerDisplay, 1000);
+    };
+
+    const stopWork = () => {
+        clearInterval(timerInterval);
+        const savedStartTime = parseInt(localStorage.getItem('startTime'), 10);
+        const savedPauseTime = parseInt(localStorage.getItem('pauseTime'), 10);
+        const endTime = savedPauseTime || Date.now();
+
+        const totalSeconds = (endTime - savedStartTime) / 1000;
+        const totalMinutes = Math.max(1, Math.round(totalSeconds / 60));
+
+        totalTimeWorkedDisplay.textContent = formatTime(totalSeconds);
+        workLogForm.dataset.startTime = new Date(savedStartTime).toISOString();
+        workLogForm.dataset.endTime = new Date(endTime).toISOString();
+        workLogForm.dataset.totalMinutes = totalMinutes;
+
+        localStorage.removeItem('startTime');
+        localStorage.removeItem('pauseTime');
+
+        updateUI('stopped');
+        timerDisplay.textContent = "00:00:00";
+        
+        workLogModal.classList.remove('hidden');
+        addInitialAllocationRow();
+        updateRemainingTime();
+    };
+
+    // --- WORK LOG MODAL LOGIC ---
+    const addInitialAllocationRow = () => {
+        allocationsContainer.innerHTML = '';
+        addAllocationRow();
+    };
+
+    const addAllocationRow = () => {
+        const template = document.getElementById('allocation-row-template');
+        const clone = template.content.cloneNode(true);
+        allocationsContainer.appendChild(clone);
+    };
+
+    const updateRemainingTime = () => {
+        const totalMinutes = parseInt(workLogForm.dataset.totalMinutes, 10);
+        let allocatedMinutes = 0;
+        document.querySelectorAll('.minutes-input').forEach(input => {
+            allocatedMinutes += parseInt(input.value, 10) || 0;
+        });
+        const remaining = totalMinutes - allocatedMinutes;
+        
+        remainingTimeDisplay.textContent = `Tempo restante para alocar: ${remaining} min`;
+        remainingTimeDisplay.classList.toggle('text-red-600', remaining < 0);
+        remainingTimeDisplay.classList.toggle('text-green-600', remaining >= 0);
+    };
+
+    const handleLogSubmit = async (e) => {
+        e.preventDefault();
+        // ... (submission logic remains the same as previous version)
+        const totalMinutes = parseInt(workLogForm.dataset.totalMinutes, 10);
+        let allocatedMinutes = 0;
+        const allocations = [];
+        
+        let hasInvalidAllocation = false;
+        document.querySelectorAll('.allocation-row').forEach(row => {
+            const minutes = parseInt(row.querySelector('[name="minutes_spent"]').value, 10) || 0;
+            allocatedMinutes += minutes;
+            const demandId = row.querySelector('[name="demand_id"]').value;
+            const description = row.querySelector('[name="description"]').value;
+
+            if (!demandId || minutes <= 0 || !description) {
+                hasInvalidAllocation = true;
+            }
+
+            allocations.push({
+                demand_id: demandId,
+                minutes_spent: minutes,
+                description: description,
+                new_status: row.querySelector('[name="new_status"]').value || null,
+            });
+        });
+
+        if (hasInvalidAllocation) {
+            alert('Por favor, preencha todos os campos para cada alocação (Demanda, Tempo e Descrição).');
+            return;
+        }
+
+        if (allocatedMinutes > totalMinutes) {
+            alert('O tempo alocado não pode exceder o tempo total trabalhado.');
+            return;
+        }
+
+        const payload = {
+            start_time: workLogForm.dataset.startTime,
+            end_time: workLogForm.dataset.endTime,
+            total_minutes: totalMinutes,
+            allocations: allocations
+        };
+        
+        try {
+            const response = await fetch("{{ url_for('tracker.log_work') }}", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+            if (response.ok) {
+                workLogModal.classList.add('hidden');
+                window.location.href = "{{ url_for('reports.index') }}";
+            } else {
+                alert(`Erro: ${result.message}`);
+            }
+        } catch (err) {
+            alert('Erro de conexão ao salvar o registro.');
+        }
+    };
+
+    // --- INITIALIZATION ---
+    function initialize() {
+        const savedStartTime = localStorage.getItem('startTime');
+        const savedPauseTime = localStorage.getItem('pauseTime');
+
+        if (savedStartTime && savedPauseTime) {
+            // State: Paused
+            updateUI('paused');
+            updateTimerDisplay(); // Display the frozen time
+        } else if (savedStartTime) {
+            // State: Running
+            updateUI('running');
+            timerInterval = setInterval(updateTimerDisplay, 1000);
+        } else {
+            // State: Stopped
+            updateUI('stopped');
+        }
+    }
+
+    // --- EVENT LISTENERS ---
+    startBtn.addEventListener('click', startWork);
+    pauseBtn.addEventListener('click', pauseWork);
+    resumeBtn.addEventListener('click', resumeWork);
+    stopBtn.addEventListener('click', stopWork);
+    
+    addAllocationBtn.addEventListener('click', addAllocationRow);
+    cancelLogBtn.addEventListener('click', () => workLogModal.classList.add('hidden'));
+    
+    allocationsContainer.addEventListener('click', e => {
+        if (e.target.closest('.remove-allocation-btn')) {
+            if (allocationsContainer.children.length > 1) {
+                e.target.closest('.allocation-row').remove();
+                updateRemainingTime();
+            } else {
+                alert('Pelo menos uma alocação é necessária.');
+            }
+        }
+    });
+
+    allocationsContainer.addEventListener('input', e => {
+        if (e.target.classList.contains('minutes-input')) {
+            updateRemainingTime();
+        }
+    });
+
+    workLogForm.addEventListener('submit', handleLogSubmit);
+
+    // Initial check on page load
+    initialize();
+});
+</script>
+<style>
+    /* Add a subtle pulse animation for the paused state */
+    .animate-pulse {
+        animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    @keyframes pulse {
+        0%, 100% {
+            opacity: 1;
+        }
+        50% {
+            opacity: .7;
+        }
+    }
+</style>
+{% endblock %}

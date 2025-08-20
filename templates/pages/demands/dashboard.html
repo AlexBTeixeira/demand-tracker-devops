@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-semibold">Painel de Demandas</h1>
+    <div class="flex items-center gap-4">
+        <div class="flex rounded-md shadow-sm" role="group">
+            <a href="{{ url_for('demands.dashboard', view='prioritize') }}"
+               class="px-4 py-2 text-sm font-medium text-gray-900 bg-white border border-gray-200 rounded-l-lg hover:bg-gray-100 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:hover:text-white dark:hover:bg-gray-600 {% if current_view == 'prioritize' %}bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300{% endif %}">
+                Priorização
+            </a>
+            <a href="{{ url_for('demands.dashboard', view='all') }}"
+               class="px-4 py-2 text-sm font-medium text-gray-900 bg-white border-t border-b border-r border-gray-200 hover:bg-gray-100 dark:bg-gray-700 dark:border-gray-600 dark:text-white dark:hover:text-white dark:hover:bg-gray-600 {% if current_view == 'all' %}bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300{% endif %}">
+                Todas
+            </a>
+        </div>
+        <a href="{{ url_for('demands.detail', demand_id=0) }}"
+           class="bg-meu-azul-padrao hover:bg-meu-azul-hover text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2">
+            <i class="ph ph-plus"></i> Nova Demanda
+        </a>
+    </div>
+</div>
+
+{% if current_view == 'all' %}
+    {# Visualização em Cards para "Todas" as demandas #}
+    <div id="demands-cards-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6">
+        {% for demand in demands %}
+        <div class="demand-card bg-white dark:bg-gray-800 p-5 rounded-lg shadow-sm border-l-4 h-full flex flex-col
+            {% if demand.status == 'Em Fila' %}border-gray-400
+            {% elif demand.status == 'Em Execução' %}border-blue-500
+            {% elif demand.status == 'Concluída' %}border-green-500
+            {% elif demand.status == 'Cancelada' %}border-red-500
+            {% else %}border-purple-500{% endif %}"
+            data-id="{{ demand.id }}">
+            <div class="flex justify-between items-start mb-4">
+                <h3 class="font-bold text-lg mb-2">{{ demand.title }}</h3>
+<span
+  class="inline-flex items-center justify-center text-center text-xs font-semibold px-2 py-1 rounded-full
+    {% if demand.status == 'Em Fila' %}bg-gray-200 text-gray-800
+    {% elif demand.status == 'Em Execução' %}bg-blue-200 text-blue-800
+    {% elif demand.status == 'Concluída' %}bg-green-200 text-green-800
+    {% elif demand.status == 'Cancelada' %}bg-red-200 text-red-800
+    {% else %}bg-purple-200 text-purple-800{% endif %}"
+>
+  {{ demand.status }}
+</span>
+
+            </div>
+            <div class="flex-1 mb-4 text-sm text-gray-600 dark:text-gray-300 flex flex-col justify-between">
+                <p class="text-xs text-gray-500 dark:text-gray-400">Criada em: {{ demand.created_at.strftime('%d/%m/%Y') }}</p>
+                <div class="grid grid-cols-2 gap-x-4 mt-2">
+                    <div>Executado: <strong>{{ "%.2f"|format(demand.executed_hours) }}h</strong></div>
+                    <div>Estimado: <strong>{{ demand.estimated_hours and "%.2f"|format(demand.estimated_hours) or 'N/A' }}h</strong></div>
+                </div>
+            </div>
+            <a href="{{ url_for('demands.detail', demand_id=demand.id) }}" class="mt-auto block text-center w-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 font-semibold py-2 rounded-md">
+                Abrir
+            </a>
+        </div>
+        {% else %}
+        <p class="col-span-full text-center text-gray-500 mt-8">Nenhuma demanda encontrada.</p>
+        {% endfor %}
+    </div>
+
+{% else %}
+    {# Visualização em Lista para "Priorização" #}
+    <div id="demands-list-container" class="space-y-3">
+        {% for demand in demands %}
+        <div class="demand-list-item bg-white dark:bg-gray-800 p-4 rounded-lg shadow-sm flex items-center gap-4 cursor-grab" data-id="{{ demand.id }}">
+            <span class="text-lg font-bold text-gray-400 dark:text-gray-500">{{ loop.index }}</span>
+            <div class="flex-grow">
+                <h3 class="font-semibold">{{ demand.title }}</h3>
+            </div>
+            <span class="text-xs font-semibold px-2 py-1 rounded-full
+                {% if demand.status == 'Em Fila' %}bg-gray-200 text-gray-800
+                {% elif demand.status == 'Em Execução' %}bg-blue-200 text-blue-800
+                {% endif %}">
+                {{ demand.status }}
+            </span>
+            <a href="{{ url_for('demands.detail', demand_id=demand.id) }}" class="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
+                <i class="ph ph-arrow-square-out text-xl"></i>
+            </a>
+        </div>
+        {% else %}
+        <p class="text-center text-gray-500 mt-8">Nenhuma demanda pendente para priorizar.</p>
+        {% endfor %}
+    </div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const container = document.getElementById('demands-list-container');
+    if (container) {
+        new Sortable(container, {
+            animation: 150,
+            handle: '.demand-list-item', 
+            onEnd: function (evt) {
+                const orderedIds = Array.from(container.children).map(item => item.dataset.id);
+                fetch("{{ url_for('demands.update_priorities') }}", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ ordered_ids: orderedIds })
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        // Recarrega a página para refletir a nova ordem com os números corretos
+                        window.location.reload();
+                    } else {
+                        alert('Erro ao salvar a nova ordem de prioridade.');
+                    }
+                })
+                .catch(err => console.error('Falha ao salvar prioridades:', err));
+            },
+        });
+    }
+});
+</script>
+{% endblock %}
