@@ -22,3 +22,15 @@ class Config:
     # A solução permanente é usar um serviço de armazenamento como o AWS S3.
     UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
     ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'xlsx', 'docx', 'zip', 'rar'}
+
+
+class TestConfig(Config):
+    """Configuração específica para testes - mantém MySQL mas com configurações de teste"""
+    TESTING = True
+    WTF_CSRF_ENABLED = False
+    
+    # Para testes, usamos variáveis de ambiente vazias para desabilitar MySQL real
+    MYSQL_HOST = os.environ.get('TEST_MYSQL_HOST', '')
+    MYSQL_USER = os.environ.get('TEST_MYSQL_USER', '')
+    MYSQL_PASSWORD = os.environ.get('TEST_MYSQL_PASSWORD', '')
+    MYSQL_DB = os.environ.get('TEST_MYSQL_DB', '')

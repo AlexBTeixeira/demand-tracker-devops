@@ -1,11 +1,10 @@
 import pytest
 from app import create_app
+from config import TestConfig
 
 @pytest.fixture
 def client():
-    app = create_app()
-    app.config['TESTING'] = True
-    app.config['WTF_CSRF_ENABLED'] = False # Desabilita CSRF para testes de formulário
+    app = create_app(TestConfig)
     with app.test_client() as client:
         yield client
 
