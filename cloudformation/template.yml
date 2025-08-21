@@ -1,6 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   Provisiona a infraestrutura completa para a aplicação Demand Tracker (VPC, EC2, RDS, S3).
+  Inclui permissões para conexão via AWS Session Manager (SSM) para contornar firewalls de rede.
   Foco em baixo custo para AWS Academy.
 
 Parameters:
@@ -13,19 +14,12 @@ Parameters:
   
   SSHKeyName:
     Type: AWS::EC2::KeyPair::KeyName
-    Description: Nome do seu par de chaves EC2 existente na região para acesso SSH.
+    Description: Nome do seu par de chaves EC2 existente na região. Necessário para criar a instância, mas não para conectar via SSM.
 
   MyIP:
     Type: String
-    Description: Seu endereço IP para acesso SSH.
+    Description: Seu endereço IP (formato CIDR, ex: 187.55.100.20/32). Usado para acesso SSH, se necessário.
     Default: 0.0.0.0/0
-  
-  # --- START: ADDED THIS NEW PARAMETER ---
-  LatestAmiId:
-    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
-    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
-    Description: The latest Amazon Linux 2 AMI ID for the region. Do not change.
-  # --- END: ADDED THIS NEW PARAMETER ---
 
 Resources:
   # --- 1. REDE (VPC, SUBNETS, GATEWAYS, ROUTING) ---
@@ -50,7 +44,7 @@ Resources:
         - Key: Name
           Value: !Sub ${AWS::StackName}-PublicSubnet
 
-  PrivateSubnetA:
+  PrivateSubnet:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
@@ -58,17 +52,7 @@ Resources:
       AvailabilityZone: "us-east-1a"
       Tags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}-PrivateSubnetA
-
-  PrivateSubnetB:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref VPC
-      CidrBlock: 10.0.3.0/24
-      AvailabilityZone: "us-east-1b"
-      Tags:
-        - Key: Name
-          Value: !Sub ${AWS::StackName}-PrivateSubnetB
+          Value: !Sub ${AWS::StackName}-PrivateSubnet
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
@@ -109,7 +93,7 @@ Resources:
   EC2SecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: "Allows SSH and App access to the EC2 instance"
+      GroupDescription: "Permite SSH (opcional) e acesso a aplicação na porta 5050"
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -127,7 +111,7 @@ Resources:
   RDSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: "Allows MySQL access from the EC2 instance"
+      GroupDescription: "Permite acesso MySQL a partir da instância EC2"
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -138,7 +122,32 @@ Resources:
         - Key: Name
           Value: !Sub ${AWS::StackName}-RDS-SG
 
-  # --- 3. S3, EC2, RDS ---
+  # --- 3. PERMISSÕES PARA A INSTÂNCIA EC2 (PARA CONEXÃO VIA SSM) ---
+  EC2InstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-EC2-Role
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Roles:
+        - !Ref EC2InstanceRole
+
+  # --- 4. S3, EC2, RDS ---
   AttachmentsBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -150,7 +159,9 @@ Resources:
     Properties:
       InstanceType: t2.micro
       KeyName: !Ref SSHKeyName
-      ImageId: !Ref LatestAmiId # <-- FIX: Use the dynamic parameter instead of a hardcoded ID
+      # Usando a AMI mais recente do Amazon Linux 2 para a região us-east-1
+      ImageId: "ami-0c55b159cbfafe1f0"
+      IamInstanceProfile: !Ref EC2InstanceProfile # <-- ANEXA A PERMISSÃO DE SSM
       SecurityGroupIds:
         - !Ref EC2SecurityGroup
       SubnetId: !Ref PublicSubnet
@@ -161,10 +172,9 @@ Resources:
   DBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
-      DBSubnetGroupDescription: "Subnet group for RDS"
+      DBSubnetGroupDescription: "Subnet group para o RDS"
       SubnetIds:
-        - !Ref PrivateSubnetA
-        - !Ref PrivateSubnetB
+        - !Ref PrivateSubnet
   
   AppDatabase:
     Type: AWS::RDS::DBInstance
@@ -181,7 +191,7 @@ Resources:
       VPCSecurityGroups:
         - !Ref RDSSecurityGroup
       PubliclyAccessible: false
-      MultiAZ: false
+      MultiAZ: false # Mantém os custos baixos
       Tags:
         - Key: Name
           Value: !Sub ${AWS::StackName}-Database

@@ -19,6 +19,13 @@ Parameters:
     Type: String
     Description: Seu endereço IP para acesso SSH.
     Default: 0.0.0.0/0
+  
+  # --- START: ADDED THIS NEW PARAMETER ---
+  LatestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+    Description: The latest Amazon Linux 2 AMI ID for the region. Do not change.
+  # --- END: ADDED THIS NEW PARAMETER ---
 
 Resources:
   # --- 1. REDE (VPC, SUBNETS, GATEWAYS, ROUTING) ---
@@ -43,7 +50,7 @@ Resources:
         - Key: Name
           Value: !Sub ${AWS::StackName}-PublicSubnet
 
-  PrivateSubnetA: # <-- RENAMED from PrivateSubnet
+  PrivateSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
@@ -53,17 +60,15 @@ Resources:
         - Key: Name
           Value: !Sub ${AWS::StackName}-PrivateSubnetA
 
-  # --- START: ADDED THIS NEW SUBNET ---
   PrivateSubnetB:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.0.3.0/24 # Use a different CIDR block
-      AvailabilityZone: "us-east-1b" # Use a different AZ
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: "us-east-1b"
       Tags:
         - Key: Name
           Value: !Sub ${AWS::StackName}-PrivateSubnetB
-  # --- END: ADDED THIS NEW SUBNET ---
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
@@ -145,7 +150,7 @@ Resources:
     Properties:
       InstanceType: t2.micro
       KeyName: !Ref SSHKeyName
-      ImageId: "ami-0c55b159cbfafe1f0" # Amazon Linux 2 AMI para us-east-1
+      ImageId: !Ref LatestAmiId # <-- FIX: Use the dynamic parameter instead of a hardcoded ID
       SecurityGroupIds:
         - !Ref EC2SecurityGroup
       SubnetId: !Ref PublicSubnet
@@ -153,15 +158,13 @@ Resources:
         - Key: Name
           Value: !Sub ${AWS::StackName}-AppServer
 
-  # --- START: UPDATED THIS RESOURCE ---
   DBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
       DBSubnetGroupDescription: "Subnet group for RDS"
       SubnetIds:
-        - !Ref PrivateSubnetA # First subnet
-        - !Ref PrivateSubnetB # Second subnet
-  # --- END: UPDATED THIS RESOURCE ---
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
   
   AppDatabase:
     Type: AWS::RDS::DBInstance
