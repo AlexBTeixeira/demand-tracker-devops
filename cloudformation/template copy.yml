@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Provisiona a infraestrutura para Demand Tracker (VPC, EC2, RDS, S3) - VERSÃO FINAL PARA AWS ACADEMY.
+  Provisiona a infraestrutura para Demand Tracker (VPC, EC2, RDS, S3) - VERSÃO PARA AWS ACADEMY.
 
 Parameters:
   GitHubRepoURL:
@@ -35,6 +35,7 @@ Parameters:
 
 Resources:
   # --- 1. REDE (VPC, SUBNETS, GATEWAYS, ROUTING) ---
+  # ... (Esta seção permanece inalterada) ...
   VPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -112,6 +113,7 @@ Resources:
       RouteTableId: !Ref PublicRouteTable
 
   # --- 2. GRUPOS DE SEGURANÇA ---
+  # ... (Esta seção permanece inalterada) ...
   EC2SecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
@@ -144,8 +146,14 @@ Resources:
         - Key: Name
           Value: !Sub ${AWS::StackName}-RDS-SG
 
-  # --- INÍCIO DA MODIFICAÇÃO: Recurso Secrets Manager REMOVIDO ---
-  # O GitHubPATSecret foi removido para evitar problemas de permissão.
+  # --- INÍCIO DA MODIFICAÇÃO: RECURSOS IAM REMOVIDOS ---
+  # A Role, as Policies e o Instance Profile foram removidos.
+  # Apenas o segredo do GitHub PAT é criado, pois sua conta deve ter permissão para criar recursos no Secrets Manager.
+  GitHubPATSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: "GitHub Personal Access Token para clonar o repositório da aplicação"
+      SecretString: !Ref GitHubPAT
   # --- FIM DA MODIFICAÇÃO ---
 
   # --- 3. S3, EC2, RDS ---
@@ -164,23 +172,26 @@ Resources:
       SecurityGroupIds:
         - !Ref EC2SecurityGroup
       SubnetId: !Ref PublicSubnet
+      # --- INÍCIO DA MODIFICAÇÃO: Usando o perfil de instância padrão do laboratório ---
+      # Em vez de criar um perfil, usamos o que o AWS Academy fornece por padrão.
       IamInstanceProfile: "LabInstanceProfile"
+      # --- FIM DA MODIFICAÇÃO ---
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash -xe
           # Atualiza os pacotes e instala as dependências
           yum update -y
-          yum install -y git python3 python3-pip mysql gcc python3-devel mariadb-devel
+          yum install -y git python3 python3-pip mysql
           pip3 install --upgrade pip
           
-          # --- INÍCIO DA MODIFICAÇÃO: Usando o PAT diretamente do parâmetro ---
+          # Recupera o GitHub PAT do Secrets Manager
+          GITHUB_PAT=$(aws secretsmanager get-secret-value --secret-id ${GitHubPATSecret} --region ${AWS::Region} --query SecretString --output text)
+          
           # Extrai o caminho do repositório da URL completa
           REPO_PATH=$(echo "${GitHubRepoURL}" | sed 's|https://||')
           
-          # Clona o repositório privado usando o PAT passado diretamente pelo parâmetro do CloudFormation.
-          # A variável ${GitHubPAT} é substituída pelo CloudFormation antes do script ser executado.
-          git clone https://${GitHubPAT}@${!REPO_PATH} /home/ec2-user/app
-          # --- FIM DA MODIFICAÇÃO ---
+          # Clona o repositório privado usando o PAT.
+          git clone https://${!GITHUB_PAT}@${!REPO_PATH} /home/ec2-user/app
           
           # Altera o proprietário dos arquivos para o usuário ec2-user
           chown -R ec2-user:ec2-user /home/ec2-user/app
