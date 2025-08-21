@@ -162,15 +162,35 @@ def prioritize(new_demand_id):
 @demands_bp.route('/attachment/<int:attachment_id>')
 def download_attachment(attachment_id):
     cur = mysql.connection.cursor(MySQLdb.cursors.DictCursor)
-    # A coluna 'filepath' agora contém a URL completa.
-    cur.execute("SELECT filepath FROM attachments WHERE id = %s", (attachment_id,))
+    cur.execute("SELECT filename, filepath FROM attachments WHERE id = %s", (attachment_id,))
     attachment = cur.fetchone()
     cur.close()
     
     if not attachment:
         return "Arquivo não encontrado", 404
         
-    return redirect(attachment['filepath'])
+    # --- MODIFICAÇÃO PRINCIPAL AQUI ---
+    try:
+        bucket_name = current_app.config['S3_BUCKET']
+        
+        # Extrai o object_key da URL completa salva no banco
+        # Ex: https://bucket-name.s3.amazonaws.com/demands/1/file.pdf -> demands/1/file.pdf
+        object_key = attachment['filepath'].split(f"{bucket_name}.s3.amazonaws.com/")[1]
+
+        # Gera uma URL segura e temporária para download
+        presigned_url = s3_client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': bucket_name, 'Key': object_key},
+            ExpiresIn=300  # A URL expira em 5 minutos (300 segundos)
+        )
+        
+        return redirect(presigned_url)
+        
+    except Exception as e:
+        flash(f"Erro ao gerar link de download: {e}", "danger")
+        # Idealmente, redirecionar para a página de detalhes da demanda
+        return redirect(url_for('demands.dashboard'))
+
 
 @demands_bp.route('/update_priorities', methods=['POST'])
 def update_priorities():

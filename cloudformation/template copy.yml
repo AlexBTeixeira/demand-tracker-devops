@@ -1,0 +1,195 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Provisiona a infraestrutura completa para a aplicação Demand Tracker (VPC, EC2, RDS, S3).
+  Foco em baixo custo para AWS Academy.
+
+Parameters:
+  DBPassword:
+    Type: String
+    Description: Senha para o banco de dados RDS (mínimo 8 caracteres alfanuméricos).
+    NoEcho: true
+    MinLength: 8
+    AllowedPattern: "[a-zA-Z0-9]+"
+  
+  SSHKeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Nome do seu par de chaves EC2 existente na região para acesso SSH.
+
+  MyIP:
+    Type: String
+    Description: Seu endereço IP para acesso SSH.
+    Default: 0.0.0.0/0
+
+Resources:
+  # --- 1. REDE (VPC, SUBNETS, GATEWAYS, ROUTING) ---
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-VPC
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: "us-east-1a"
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-PublicSubnet
+
+  PrivateSubnetA: # <-- RENAMED from PrivateSubnet
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: "us-east-1a"
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-PrivateSubnetA
+
+  # --- START: ADDED THIS NEW SUBNET ---
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.3.0/24 # Use a different CIDR block
+      AvailabilityZone: "us-east-1b" # Use a different AZ
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-PrivateSubnetB
+  # --- END: ADDED THIS NEW SUBNET ---
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-IGW
+  
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-PublicRouteTable
+  
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+  
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  # --- 2. GRUPOS DE SEGURANÇA ---
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allows SSH and App access to the EC2 instance"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref MyIP
+        - IpProtocol: tcp
+          FromPort: 5050
+          ToPort: 5050
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-EC2-SG
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allows MySQL access from the EC2 instance"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !GetAtt EC2SecurityGroup.GroupId
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-RDS-SG
+
+  # --- 3. S3, EC2, RDS ---
+  AttachmentsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "demand-tracker-attachments-${AWS::AccountId}-${AWS::Region}"
+      AccessControl: Private
+  
+  AppServerInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      KeyName: !Ref SSHKeyName
+      ImageId: "ami-0c55b159cbfafe1f0" # Amazon Linux 2 AMI para us-east-1
+      SecurityGroupIds:
+        - !Ref EC2SecurityGroup
+      SubnetId: !Ref PublicSubnet
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-AppServer
+
+  # --- START: UPDATED THIS RESOURCE ---
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: "Subnet group for RDS"
+      SubnetIds:
+        - !Ref PrivateSubnetA # First subnet
+        - !Ref PrivateSubnetB # Second subnet
+  # --- END: UPDATED THIS RESOURCE ---
+  
+  AppDatabase:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub "${AWS::StackName}-db"
+      DBName: demandtrackerdb 
+      AllocatedStorage: 20
+      DBInstanceClass: db.t3.micro
+      Engine: mysql
+      EngineVersion: "8.0"
+      MasterUsername: admin
+      MasterUserPassword: !Ref DBPassword
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+      PubliclyAccessible: false
+      MultiAZ: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-Database
+
+Outputs:
+  EC2PublicIP:
+    Description: "IP Público do servidor da aplicação"
+    Value: !GetAtt AppServerInstance.PublicIp
+  RDSEndpoint:
+    Description: "Endpoint do banco de dados RDS"
+    Value: !GetAtt AppDatabase.Endpoint.Address
+  S3BucketName:
+    Description: "Nome do bucket S3 para anexos"
+    Value: !Ref AttachmentsBucket
