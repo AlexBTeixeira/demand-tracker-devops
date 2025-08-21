@@ -48,7 +48,7 @@ def test_log_work_success(client, mock_mysql):
                 'demand_id': '2',
                 'minutes_spent': 20,
                 'description': 'Trabalhei na demanda 2',
-                'new_status': ''
+                'new_status': None # CORREÇÃO: Mudar de '' para None para simular o comportamento do JS
             }
         ]
     }
