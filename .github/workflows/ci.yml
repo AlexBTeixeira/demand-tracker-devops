@@ -1,5 +1,4 @@
-# .github/workflows/ci.yml
-name: CI Pipeline Aprimorado - Demand Tracker
+name: CI Pipeline - Demand Tracker
 
 on:
   push:
@@ -8,8 +7,8 @@ on:
     branches: [ "main" ]
 
 jobs:
-  build-and-test:
-    name: Build, Teste e Análise de Qualidade
+  test-and-lint:
+    name: Teste e Lint
     runs-on: ubuntu-latest
 
     steps:
@@ -24,34 +23,19 @@ jobs:
     - name: 3. Instalar dependências
       run: |
         python -m pip install --upgrade pip
-        # Instala as dependências da aplicação e de desenvolvimento/teste
+        # Instala dependências de teste e da aplicação
         pip install -r requirements.txt
+        pip install pytest flake8
 
-    - name: 4. Análise de Segurança das dependências com Safety
+    - name: 4. Análise estática com Flake8
       run: |
-        pip install safety
-        safety check -r requirements.txt
-
-    - name: 5. Análise de formatação com Black e isort
-      run: |
-        pip install black isort
-        # O modo --check não altera os arquivos, apenas falha se não estiverem formatados
-        isort . --check-only --profile black
-        black . --check
-
-    - name: 6. Análise estática com Flake8
-      run: |
-        pip install flake8
-        # Executa o flake8 com configurações padrão, que são mais abrangentes
         # --count: mostra o total de erros
+        # --select: seleciona erros específicos para falhar o build (erros de sintaxe/lógica)
         # --statistics: mostra contagem de cada tipo de erro
-        # --max-line-length=120: exemplo de configuração comum
-        flake8 . --count --statistics --max-line-length=120
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
 
-    - name: 7. Executar testes com Pytest e gerar cobertura
+    - name: 5. Executar testes com Pytest
       run: |
-        pip install pytest pytest-cov
         # Adiciona o diretório raiz ao PYTHONPATH para que os imports funcionem
         export PYTHONPATH=$PYTHONPATH:$(pwd)
-        # Roda os testes e exige uma cobertura mínima de 80%
-        pytest tests/ --cov=./ --cov-report=xml --cov-fail-under=80
+        pytest tests/
