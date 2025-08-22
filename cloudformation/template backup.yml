@@ -1,9 +1,17 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Provisiona a infraestrutura completa para a aplicação Demand Tracker (VPC, EC2, RDS, S3).
-  Foco em baixo custo para AWS Academy.
+  Provisiona a infraestrutura para Demand Tracker (VPC, EC2, RDS, S3) - VERSÃO FINAL PARA AWS ACADEMY.
 
 Parameters:
+  GitHubRepoURL:
+    Type: String
+    Description: A URL HTTPS completa do seu repositório privado no GitHub.
+
+  GitHubPAT:
+    Type: String
+    Description: Seu GitHub Personal Access Token (PAT) com permissão para clonar o repositório.
+    NoEcho: true
+
   DBPassword:
     Type: String
     Description: Senha para o banco de dados RDS (mínimo 8 caracteres alfanuméricos).
@@ -20,12 +28,10 @@ Parameters:
     Description: Seu endereço IP para acesso SSH.
     Default: 0.0.0.0/0
   
-  # --- START: ADDED THIS NEW PARAMETER ---
   LatestAmiId:
     Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
     Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
     Description: The latest Amazon Linux 2 AMI ID for the region. Do not change.
-  # --- END: ADDED THIS NEW PARAMETER ---
 
 Resources:
   # --- 1. REDE (VPC, SUBNETS, GATEWAYS, ROUTING) ---
@@ -138,6 +144,10 @@ Resources:
         - Key: Name
           Value: !Sub ${AWS::StackName}-RDS-SG
 
+  # --- INÍCIO DA MODIFICAÇÃO: Recurso Secrets Manager REMOVIDO ---
+  # O GitHubPATSecret foi removido para evitar problemas de permissão.
+  # --- FIM DA MODIFICAÇÃO ---
+
   # --- 3. S3, EC2, RDS ---
   AttachmentsBucket:
     Type: AWS::S3::Bucket
@@ -150,10 +160,74 @@ Resources:
     Properties:
       InstanceType: t2.micro
       KeyName: !Ref SSHKeyName
-      ImageId: !Ref LatestAmiId # <-- FIX: Use the dynamic parameter instead of a hardcoded ID
+      ImageId: !Ref LatestAmiId
       SecurityGroupIds:
         - !Ref EC2SecurityGroup
       SubnetId: !Ref PublicSubnet
+      IamInstanceProfile: "LabInstanceProfile"
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          # Atualiza os pacotes e instala as dependências
+          yum update -y
+          yum install -y git python3 python3-pip mysql gcc python3-devel mariadb-devel
+          pip3 install --upgrade pip
+          
+          # --- INÍCIO DA MODIFICAÇÃO: Usando o PAT diretamente do parâmetro ---
+          # Extrai o caminho do repositório da URL completa
+          REPO_PATH=$(echo "${GitHubRepoURL}" | sed 's|https://||')
+          
+          # Clona o repositório privado usando o PAT passado diretamente pelo parâmetro do CloudFormation.
+          # A variável ${GitHubPAT} é substituída pelo CloudFormation antes do script ser executado.
+          git clone https://${GitHubPAT}@${!REPO_PATH} /home/ec2-user/app
+          # --- FIM DA MODIFICAÇÃO ---
+          
+          # Altera o proprietário dos arquivos para o usuário ec2-user
+          chown -R ec2-user:ec2-user /home/ec2-user/app
+          
+          cd /home/ec2-user/app
+          
+          # Instala as dependências do Python
+          pip3 install -r requirements.txt
+          
+          # Espera o banco de dados RDS estar acessível
+          while ! mysql -h ${AppDatabase.Endpoint.Address} -u admin -p${DBPassword} -e "SELECT 1"; do
+            echo "Aguardando o banco de dados ficar disponível..."
+            sleep 5
+          done
+          
+          # Executa o script SQL para criar as tabelas
+          mysql -h ${AppDatabase.Endpoint.Address} -u admin -p${DBPassword} demandtrackerdb < sql/schema.sql
+
+          # Gera uma chave secreta para a aplicação Flask.
+          SECRET_KEY=$(openssl rand -hex 16)
+
+          # Cria um arquivo de serviço systemd para gerenciar a aplicação
+          cat > /etc/systemd/system/demand-tracker.service <<EOF
+          [Unit]
+          Description=Gunicorn instance to serve Demand Tracker
+          After=network.target
+
+          [Service]
+          User=ec2-user
+          Group=ec2-user
+          WorkingDirectory=/home/ec2-user/app
+          Environment="MYSQL_HOST=${AppDatabase.Endpoint.Address}"
+          Environment="MYSQL_USER=admin"
+          Environment="MYSQL_PASSWORD=${DBPassword}"
+          Environment="MYSQL_DB=demandtrackerdb"
+          Environment="S3_BUCKET=${AttachmentsBucket}"
+          Environment="SECRET_KEY=${!SECRET_KEY}"
+          ExecStart=/usr/local/bin/gunicorn --workers 3 --bind 0.0.0.0:5050 wsgi:app
+
+          [Install]
+          WantedBy=multi-user.target
+          EOF
+
+          # Habilita e inicia o serviço
+          systemctl daemon-reload
+          systemctl enable demand-tracker.service
+          systemctl start demand-tracker.service
       Tags:
         - Key: Name
           Value: !Sub ${AWS::StackName}-AppServer

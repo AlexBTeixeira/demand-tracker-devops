@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Provisiona a infraestrutura para Demand Tracker (VPC, EC2, RDS, S3) - VERSÃO FINAL PARA AWS ACADEMY.
+  Provisiona a infraestrutura para a aplicação Demand Tracker (VPC, EC2, RDS, S3) utilizando AWS CloudFormation e levando em conta as limitações do Perfil de estudante.
 
 Parameters:
   GitHubRepoURL:
@@ -10,14 +10,14 @@ Parameters:
   GitHubPAT:
     Type: String
     Description: Seu GitHub Personal Access Token (PAT) com permissão para clonar o repositório.
-    NoEcho: true
+    NoEcho: true   # não aparece no console
 
   DBPassword:
     Type: String
     Description: Senha para o banco de dados RDS (mínimo 8 caracteres alfanuméricos).
     NoEcho: true
     MinLength: 8
-    AllowedPattern: "[a-zA-Z0-9]+"
+    AllowedPattern: "[a-zA-Z0-9]+"   # alfanuméricos apenas
   
   SSHKeyName:
     Type: AWS::EC2::KeyPair::KeyName
@@ -26,8 +26,8 @@ Parameters:
   MyIP:
     Type: String
     Description: Seu endereço IP para acesso SSH.
-    Default: 0.0.0.0/0
-  
+    Default: 0.0.0.0/0   # Fica aberto como default, mas é melhor restringir depois
+
   LatestAmiId:
     Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
     Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
@@ -38,7 +38,7 @@ Resources:
   VPC:
     Type: AWS::EC2::VPC
     Properties:
-      CidrBlock: 10.0.0.0/16
+      CidrBlock: 10.0.0.0/16   # Faixa de IPs da VPC
       EnableDnsSupport: true
       EnableDnsHostnames: true
       Tags:
@@ -49,9 +49,9 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.0.1.0/24
+      CidrBlock: 10.0.1.0/24   # Subnet pública 
       MapPublicIpOnLaunch: true
-      AvailabilityZone: "us-east-1a"
+      AvailabilityZone: "us-east-1a"   # Zona de disponibilidade
       Tags:
         - Key: Name
           Value: !Sub ${AWS::StackName}-PublicSubnet
@@ -60,7 +60,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.0.2.0/24
+      CidrBlock: 10.0.2.0/24   # Subnet privada
       AvailabilityZone: "us-east-1a"
       Tags:
         - Key: Name
@@ -70,7 +70,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.0.3.0/24
+      CidrBlock: 10.0.3.0/24   # Outra subnet privada, para alta disponibilidade
       AvailabilityZone: "us-east-1b"
       Tags:
         - Key: Name
@@ -102,7 +102,7 @@ Resources:
     DependsOn: AttachGateway
     Properties:
       RouteTableId: !Ref PublicRouteTable
-      DestinationCidrBlock: 0.0.0.0/0
+      DestinationCidrBlock: 0.0.0.0/0   # Rota padrão para a internet
       GatewayId: !Ref InternetGateway
   
   PublicSubnetRouteTableAssociation:
@@ -119,13 +119,13 @@ Resources:
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: 22
+          FromPort: 22   # Porta SSH
           ToPort: 22
-          CidrIp: !Ref MyIP
+          CidrIp: !Ref MyIP   # Restrição de IP para SSH 
         - IpProtocol: tcp
-          FromPort: 5050
+          FromPort: 5050   # Porta que a aplicação Flask vai rodar
           ToPort: 5050
-          CidrIp: 0.0.0.0/0
+          CidrIp: 0.0.0.0/0  
       Tags:
         - Key: Name
           Value: !Sub ${AWS::StackName}-EC2-SG
@@ -137,72 +137,62 @@ Resources:
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
-          FromPort: 3306
+          FromPort: 3306   # Porta padrão do MySQL
           ToPort: 3306
-          SourceSecurityGroupId: !GetAtt EC2SecurityGroup.GroupId
+          SourceSecurityGroupId: !GetAtt EC2SecurityGroup.GroupId   # Só a EC2 pode acessar
       Tags:
         - Key: Name
           Value: !Sub ${AWS::StackName}-RDS-SG
 
-  # --- INÍCIO DA MODIFICAÇÃO: Recurso Secrets Manager REMOVIDO ---
-  # O GitHubPATSecret foi removido para evitar problemas de permissão.
-  # --- FIM DA MODIFICAÇÃO ---
+  # --- OBS: Eu tirei o Secrets Manager pq tava dando problema devido as permissões do AWS Academy ---
+  # A solução foi usar o parâmetro direto, não é o ideal, mas é o que temos.
 
   # --- 3. S3, EC2, RDS ---
   AttachmentsBucket:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "demand-tracker-attachments-${AWS::AccountId}-${AWS::Region}"
-      AccessControl: Private
-  
+      AccessControl: Private   # Bucket privado
+
   AppServerInstance:
     Type: AWS::EC2::Instance
     Properties:
-      InstanceType: t2.micro
+      InstanceType: t2.micro   # Usando free tier para economizar
       KeyName: !Ref SSHKeyName
       ImageId: !Ref LatestAmiId
       SecurityGroupIds:
         - !Ref EC2SecurityGroup
       SubnetId: !Ref PublicSubnet
-      IamInstanceProfile: "LabInstanceProfile"
+      IamInstanceProfile: "LabInstanceProfile"   # Já vem no AWS Academy, não posso criar outros
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash -xe
-          # Atualiza os pacotes e instala as dependências
+          # Atualiza pacotes
           yum update -y
           yum install -y git python3 python3-pip mysql gcc python3-devel mariadb-devel
           pip3 install --upgrade pip
           
-          # --- INÍCIO DA MODIFICAÇÃO: Usando o PAT diretamente do parâmetro ---
-          # Extrai o caminho do repositório da URL completa
+          # Clona o repositório do GitHub usando o PAT direto
           REPO_PATH=$(echo "${GitHubRepoURL}" | sed 's|https://||')
-          
-          # Clona o repositório privado usando o PAT passado diretamente pelo parâmetro do CloudFormation.
-          # A variável ${GitHubPAT} é substituída pelo CloudFormation antes do script ser executado.
           git clone https://${GitHubPAT}@${!REPO_PATH} /home/ec2-user/app
-          # --- FIM DA MODIFICAÇÃO ---
           
-          # Altera o proprietário dos arquivos para o usuário ec2-user
           chown -R ec2-user:ec2-user /home/ec2-user/app
           
           cd /home/ec2-user/app
+          pip3 install -r requirements.txt   # instala libs do Python
           
-          # Instala as dependências do Python
-          pip3 install -r requirements.txt
-          
-          # Espera o banco de dados RDS estar acessível
+          # Espera o RDS ficar pronto (loop básico)
           while ! mysql -h ${AppDatabase.Endpoint.Address} -u admin -p${DBPassword} -e "SELECT 1"; do
             echo "Aguardando o banco de dados ficar disponível..."
             sleep 5
           done
           
-          # Executa o script SQL para criar as tabelas
+          # Cria as tabelas do banco
           mysql -h ${AppDatabase.Endpoint.Address} -u admin -p${DBPassword} demandtrackerdb < sql/schema.sql
 
-          # Gera uma chave secreta para a aplicação Flask.
-          SECRET_KEY=$(openssl rand -hex 16)
+          SECRET_KEY=$(openssl rand -hex 16)   # Cria secret da app Flask
 
-          # Cria um arquivo de serviço systemd para gerenciar a aplicação
+          # Cria o serviço do gunicorn pra rodar a aplicação
           cat > /etc/systemd/system/demand-tracker.service <<EOF
           [Unit]
           Description=Gunicorn instance to serve Demand Tracker
@@ -224,7 +214,6 @@ Resources:
           WantedBy=multi-user.target
           EOF
 
-          # Habilita e inicia o serviço
           systemctl daemon-reload
           systemctl enable demand-tracker.service
           systemctl start demand-tracker.service
@@ -238,14 +227,14 @@ Resources:
       DBSubnetGroupDescription: "Subnet group for RDS"
       SubnetIds:
         - !Ref PrivateSubnetA
-        - !Ref PrivateSubnetB
+        - !Ref PrivateSubnetB   # Outra subnet privada para alta disponibilidade
   
   AppDatabase:
     Type: AWS::RDS::DBInstance
     Properties:
       DBInstanceIdentifier: !Sub "${AWS::StackName}-db"
       DBName: demandtrackerdb 
-      AllocatedStorage: 20
+      AllocatedStorage: 20   # 20 GB
       DBInstanceClass: db.t3.micro
       Engine: mysql
       EngineVersion: "8.0"
@@ -254,8 +243,8 @@ Resources:
       DBSubnetGroupName: !Ref DBSubnetGroup
       VPCSecurityGroups:
         - !Ref RDSSecurityGroup
-      PubliclyAccessible: false
-      MultiAZ: false
+      PubliclyAccessible: false   # Não expõe o banco na internet
+      MultiAZ: false   # Não usa Multi-AZ para economizar
       Tags:
         - Key: Name
           Value: !Sub ${AWS::StackName}-Database
