@@ -7,7 +7,7 @@ Description: >
 Parameters:
   GitHubRepoURL:
     Type: String
-    Description: A URL HTTPS do seu repositório (sem o https://, ex: github.com/user/repo.git).
+    Description: A URL HTTPS do seu repositório 
 
   GitHubPAT:
     Type: String
@@ -29,6 +29,11 @@ Parameters:
     Type: String
     Description: Seu endereço IP para acesso SSH à Instância de Gerenciamento.
     Default: 0.0.0.0/0
+
+  LatestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
+    Description: "ID da AMI mais recente do Amazon Linux 2 (via SSM Parameter Store)."
 
 Resources:
   # --- 1. REDE (VPC, SUBNETS, IGW, ROUTING) - Sem alterações ---
@@ -113,7 +118,8 @@ Resources:
   ManagementSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: "Permite acesso SSH à Instância de Gerenciamento"
+      # CORRIGIDO: Removidos os caracteres acentuados
+      GroupDescription: "Permite acesso SSH a Instancia de Gerenciamento"
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -127,7 +133,8 @@ Resources:
   ECSServiceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: "Permite acesso à aplicação rodando no ECS"
+      # CORRIGIDO: Removidos os caracteres acentuados
+      GroupDescription: "Permite acesso a aplicacao rodando no ECS"
       VpcId: !Ref VPC
       SecurityGroupIngress:
         - IpProtocol: tcp
@@ -141,16 +148,23 @@ Resources:
   RDSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      GroupDescription: "Permite acesso MySQL a partir dos containers ECS"
+      GroupDescription: "Allows MySQL access from the ECS containers AND Management Instance"
       VpcId: !Ref VPC
       SecurityGroupIngress:
+        # Regra ORIGINAL: Permite acesso dos containers ECS
         - IpProtocol: tcp
           FromPort: 3306
           ToPort: 3306
-          SourceSecurityGroupId: !Ref ECSServiceSecurityGroup
+          SourceSecurityGroupId: !GetAtt ECSServiceSecurityGroup.GroupId
+        # Regra NOVA: Permite acesso da Instância de Gerenciamento
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !GetAtt ManagementSecurityGroup.GroupId # <-- ADICIONE ESTA REGRA
       Tags:
         - Key: Name
           Value: !Sub ${AWS::StackName}-RDS-SG
+
 
   # --- 3. RECURSOS DA APLICAÇÃO (S3, RDS) ---
   AttachmentsBucket:
@@ -193,7 +207,7 @@ Resources:
     Properties:
       InstanceType: t2.micro
       KeyName: !Ref SSHKeyName
-      ImageId: 'ami-0c55b159cbfafe1f0' # Amazon Linux 2 AMI
+      ImageId: !Ref LatestAmiId   
       SecurityGroupIds:
         - !Ref ManagementSecurityGroup
       SubnetId: !Ref PublicSubnet
@@ -239,6 +253,7 @@ Resources:
       Tags:
         - Key: Name
           Value: !Sub ${AWS::StackName}-Management-Instance
+
 
   # --- 5. CONTAINERIZAÇÃO (ECR & ECS) ---
   ECRRepository:
