@@ -1,5 +1,5 @@
 #!/bin/bash
-# deploy.sh (versão final sem roles na task definition)
+# deploy.sh (versão final com correção no caminho do JSON)
 
 set -e
 
@@ -40,21 +40,22 @@ docker tag $ECR_REPOSITORY_URI:latest $ECR_REPOSITORY_URI:$IMAGE_TAG
 docker push $ECR_REPOSITORY_URI:$IMAGE_TAG
 docker push $ECR_REPOSITORY_URI:latest
 
-# --- PASSO 3: CRIAR/ATUALIZAR A TASK DEFINITION (SEM ROLES) ---
-echo "Criando nova revisão da Task Definition (sem roles)..."
+# --- PASSO 3: CRIAR/ATUALIZAR A TASK DEFINITION ---
+echo "Criando nova revisão da Task Definition..."
 DB_PASSWORD=$(cat /home/ec2-user/db_secret.txt)
 
-cat > task-definition.json <<EOF
+# --- INÍCIO DA MODIFICAÇÃO ---
+# Definir um caminho absoluto para o arquivo JSON para evitar ambiguidades
+TASK_DEF_JSON_PATH="/home/ec2-user/app/task-definition.json"
+
+# Gerar o arquivo JSON
+cat > ${TASK_DEF_JSON_PATH} <<EOF
 {
   "family": "${ECS_TASK_DEFINITION_NAME}",
   "networkMode": "awsvpc",
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "256",
   "memory": "512",
-  # --- INÍCIO DA MODIFICAÇÃO: Roles removidas ---
-  # "executionRoleArn": "...",
-  # "taskRoleArn": "...",
-  # --- FIM DA MODIFICAÇÃO ---
   "containerDefinitions": [
     {
       "name": "demand-tracker-container",
@@ -87,8 +88,9 @@ cat > task-definition.json <<EOF
 }
 EOF
 
-# Registra a nova definição de tarefa
-aws ecs register-task-definition --cli-input-json file://task-definition.json > /dev/null
+# Registra a nova definição de tarefa usando o caminho absoluto
+aws ecs register-task-definition --cli-input-json file://${TASK_DEF_JSON_PATH} > /dev/null
+# --- FIM DA MODIFICAÇÃO ---
 
 # --- PASSO 4: CRIAR/ATUALIZAR O SERVIÇO ECS ---
 echo "Verificando o serviço ECS..."
