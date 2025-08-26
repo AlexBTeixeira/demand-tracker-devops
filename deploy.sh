@@ -1,7 +1,7 @@
 #!/bin/bash
-# deploy.sh (versão simplificada e corrigida)
+# deploy.sh (versão final sem roles na task definition)
 
-set -e # Para o script se qualquer comando falhar
+set -e
 
 # --- PASSO 0: VERIFICAR O NOME DA STACK ---
 if [ -z "$1" ]; then
@@ -10,7 +10,7 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
-STACK_NAME=$1 # Pega o nome da stack do primeiro argumento do script
+STACK_NAME=$1
 echo "Iniciando deploy para a stack: $STACK_NAME"
 
 # --- OBTENÇÃO DAS VARIÁVEIS ---
@@ -25,7 +25,6 @@ DB_HOST=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "S
 
 # --- PASSO 1: ATUALIZAR O CÓDIGO FONTE ---
 echo "Atualizando o código-fonte do repositório..."
-# O script é executado de dentro do diretório /app, então não precisa de cd
 git pull
 
 # --- PASSO 2: BUILD E PUSH DA IMAGEM DOCKER ---
@@ -41,11 +40,9 @@ docker tag $ECR_REPOSITORY_URI:latest $ECR_REPOSITORY_URI:$IMAGE_TAG
 docker push $ECR_REPOSITORY_URI:$IMAGE_TAG
 docker push $ECR_REPOSITORY_URI:latest
 
-# --- PASSO 3: CRIAR/ATUALIZAR A TASK DEFINITION ---
-echo "Criando nova revisão da Task Definition..."
+# --- PASSO 3: CRIAR/ATUALIZAR A TASK DEFINITION (SEM ROLES) ---
+echo "Criando nova revisão da Task Definition (sem roles)..."
 DB_PASSWORD=$(cat /home/ec2-user/db_secret.txt)
-TASK_ROLE_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/LabInstanceProfile"
-EXECUTION_ROLE_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/ecsTaskExecutionRole"
 
 cat > task-definition.json <<EOF
 {
@@ -54,8 +51,10 @@ cat > task-definition.json <<EOF
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "256",
   "memory": "512",
-  "executionRoleArn": "${EXECUTION_ROLE_ARN}",
-  "taskRoleArn": "${TASK_ROLE_ARN}",
+  # --- INÍCIO DA MODIFICAÇÃO: Roles removidas ---
+  # "executionRoleArn": "...",
+  # "taskRoleArn": "...",
+  # --- FIM DA MODIFICAÇÃO ---
   "containerDefinitions": [
     {
       "name": "demand-tracker-container",
@@ -88,10 +87,12 @@ cat > task-definition.json <<EOF
 }
 EOF
 
+# Registra a nova definição de tarefa
 aws ecs register-task-definition --cli-input-json file://task-definition.json > /dev/null
 
 # --- PASSO 4: CRIAR/ATUALIZAR O SERVIÇO ECS ---
 echo "Verificando o serviço ECS..."
+# ... (o resto do script permanece o mesmo)
 SERVICE_EXISTS=$(aws ecs describe-services --cluster $ECS_CLUSTER_NAME --services $ECS_SERVICE_NAME --query "services[?status!='INACTIVE'] | length(@)")
 SUBNET_ID=$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=${STACK_NAME}-PublicSubnet" --query "Subnets[0].SubnetId" --output text)
 SECURITY_GROUP_ID=$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=${STACK_NAME}-ECS-Service-SG" --query "SecurityGroups[0].GroupId" --output text)
