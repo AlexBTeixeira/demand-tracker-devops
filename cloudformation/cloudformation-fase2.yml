@@ -1,0 +1,271 @@
+# cloudformation-fase2.yml (sem SSM)
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Fase 2: Provisiona a infraestrutura para Demand Tracker usando containers com ECS.
+  (Versão adaptada para AWS Academy, sem uso de SSM Parameter Store).
+
+Parameters:
+  GitHubRepoURL:
+    Type: String
+    Description: A URL HTTPS do seu repositório (sem o https://, ex: github.com/user/repo.git).
+
+  GitHubPAT:
+    Type: String
+    Description: Seu GitHub Personal Access Token (PAT) com permissão de clone.
+    NoEcho: true
+
+  DBPassword:
+    Type: String
+    Description: Senha para o banco de dados RDS (mínimo 8 caracteres alfanuméricos).
+    NoEcho: true
+    MinLength: 8
+    AllowedPattern: "[a-zA-Z0-9]+"
+
+  SSHKeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Nome do seu par de chaves EC2 para acesso à Instância de Gerenciamento.
+
+  MyIP:
+    Type: String
+    Description: Seu endereço IP para acesso SSH à Instância de Gerenciamento.
+    Default: 0.0.0.0/0
+
+Resources:
+  # --- 1. REDE (VPC, SUBNETS, IGW, ROUTING) - Sem alterações ---
+  # ... (copie a seção 1, 2 e 3 do arquivo anterior, não há mudanças aqui)
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-VPC
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: "us-east-1a"
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-PublicSubnet
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: "us-east-1a"
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-PrivateSubnetA
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: "us-east-1b"
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-PrivateSubnetB
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-IGW
+
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-PublicRouteTable
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  # --- 2. GRUPOS DE SEGURANÇA ---
+  ManagementSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Permite acesso SSH à Instância de Gerenciamento"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref MyIP
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-Management-SG
+
+  ECSServiceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Permite acesso à aplicação rodando no ECS"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5050
+          ToPort: 5050
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-ECS-Service-SG
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Permite acesso MySQL a partir dos containers ECS"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref ECSServiceSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-RDS-SG
+
+  # --- 3. RECURSOS DA APLICAÇÃO (S3, RDS) ---
+  AttachmentsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "demand-tracker-attachments-${AWS::AccountId}-${AWS::Region}"
+      AccessControl: Private
+
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: "Subnet group for RDS"
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+
+  AppDatabase:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBInstanceIdentifier: !Sub "${AWS::StackName}-db"
+      DBName: demandtrackerdb
+      AllocatedStorage: 20
+      DBInstanceClass: db.t3.micro
+      Engine: mysql
+      EngineVersion: "8.0"
+      MasterUsername: admin
+      MasterUserPassword: !Ref DBPassword
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+      PubliclyAccessible: false
+      MultiAZ: false
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-Database
+
+  # --- 4. INSTÂNCIA DE GERENCIAMENTO (BASTION HOST) ---
+  ManagementInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t2.micro
+      KeyName: !Ref SSHKeyName
+      ImageId: 'ami-0c55b159cbfafe1f0' # Amazon Linux 2 AMI
+      SecurityGroupIds:
+        - !Ref ManagementSecurityGroup
+      SubnetId: !Ref PublicSubnet
+      IamInstanceProfile: "LabInstanceProfile" # Perfil existente no AWS Academy
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash -xe
+          # Instala dependências
+          yum update -y
+          amazon-linux-extras install docker -y
+          service docker start
+          usermod -a -G docker ec2-user
+          chkconfig docker on
+          yum install -y git mysql
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+          unzip awscliv2.zip
+          ./aws/install
+          
+          # Clona o repositório
+          git clone https://${GitHubPAT}@${GitHubRepoURL} /home/ec2-user/app
+          chown -R ec2-user:ec2-user /home/ec2-user/app
+          
+          # --- INÍCIO DA MODIFICAÇÃO: Armazenar a senha do DB em um arquivo ---
+          # Cria um arquivo seguro com a senha do banco para ser usado pelo script de deploy
+          echo "${DBPassword}" > /home/ec2-user/db_secret.txt
+          chown ec2-user:ec2-user /home/ec2-user/db_secret.txt
+          chmod 600 /home/ec2-user/db_secret.txt # Apenas o proprietário (ec2-user) pode ler/escrever
+          # --- FIM DA MODIFICAÇÃO ---
+          
+          # Script para executar o schema do banco de dados
+          cat > /home/ec2-user/run-schema.sh <<EOF
+          #!/bin/bash
+          echo "Aguardando o banco de dados..."
+          while ! mysql -h ${AppDatabase.Endpoint.Address} -u admin -p${DBPassword} -e "SELECT 1"; do
+            sleep 5
+          done
+          echo "Banco de dados pronto. Executando schema..."
+          mysql -h ${AppDatabase.Endpoint.Address} -u admin -p${DBPassword} demandtrackerdb < /home/ec2-user/app/sql/schema.sql
+          echo "Schema executado."
+          EOF
+          chmod +x /home/ec2-user/run-schema.sh
+          chown ec2-user:ec2-user /home/ec2-user/run-schema.sh
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-Management-Instance
+
+  # --- 5. CONTAINERIZAÇÃO (ECR & ECS) ---
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${AWS::StackName}-repo"
+      ImageScanningConfiguration:
+        ScanOnPush: true
+
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub "${AWS::StackName}-cluster"
+
+Outputs:
+  ManagementInstanceIP:
+    Description: "IP Público da Instância de Gerenciamento para SSH"
+    Value: !GetAtt ManagementInstance.PublicIp
+  ECRRepositoryURI:
+    Description: "URI do repositório ECR para push das imagens Docker"
+    Value: !Ref ECRRepository
+  ECSClusterName:
+    Description: "Nome do Cluster ECS"
+    Value: !Ref ECSCluster
+  RDSEndpoint:
+    Description: "Endpoint do banco de dados RDS"
+    Value: !GetAtt AppDatabase.Endpoint.Address
+  S3BucketName:
+    Description: "Nome do bucket S3"
+    Value: !Ref AttachmentsBucket

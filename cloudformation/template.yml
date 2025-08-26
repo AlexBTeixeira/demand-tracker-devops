@@ -2,6 +2,8 @@ AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   Provisiona a infraestrutura para a aplicação Demand Tracker (VPC, EC2, RDS, S3) utilizando AWS CloudFormation e levando em conta as limitações do Perfil de estudante.
 
+# Parâmetros de entrada
+# permitem personalizar a pilha sem alterar o template
 Parameters:
   GitHubRepoURL:
     Type: String
@@ -26,7 +28,7 @@ Parameters:
   MyIP:
     Type: String
     Description: Seu endereço IP para acesso SSH.
-    Default: 0.0.0.0/0   # Fica aberto como default, mas é melhor restringir depois
+    Default: 0.0.0.0/0   # Fica aberto como default, mas da a opção de restringir
 
   LatestAmiId:
     Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
@@ -167,32 +169,40 @@ Resources:
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash -xe
-          # Atualiza pacotes
+          # Atualiza os pacotes e instala as dependências
           yum update -y
           yum install -y git python3 python3-pip mysql gcc python3-devel mariadb-devel
           pip3 install --upgrade pip
           
-          # Clona o repositório do GitHub usando o PAT direto
+          # --- INÍCIO DA MODIFICAÇÃO: Usando o PAT diretamente do parâmetro ---
+          # Extrai o caminho do repositório da URL completa
           REPO_PATH=$(echo "${GitHubRepoURL}" | sed 's|https://||')
+          
+          # Clona o repositório privado usando o PAT passado diretamente pelo parâmetro do CloudFormation.
+          # A variável ${GitHubPAT} é substituída pelo CloudFormation antes do script ser executado.
           git clone https://${GitHubPAT}@${!REPO_PATH} /home/ec2-user/app
           
+          # Altera o proprietário dos arquivos para o usuário ec2-user
           chown -R ec2-user:ec2-user /home/ec2-user/app
           
           cd /home/ec2-user/app
-          pip3 install -r requirements.txt   # instala libs do Python
           
-          # Espera o RDS ficar pronto (loop básico)
+          # Instala as dependências do Python
+          pip3 install -r requirements.txt
+
+          # Espera o banco de dados RDS estar disponível
           while ! mysql -h ${AppDatabase.Endpoint.Address} -u admin -p${DBPassword} -e "SELECT 1"; do
             echo "Aguardando o banco de dados ficar disponível..."
             sleep 5
           done
           
-          # Cria as tabelas do banco
+          # Executa o script SQL para criar as tabelas
           mysql -h ${AppDatabase.Endpoint.Address} -u admin -p${DBPassword} demandtrackerdb < sql/schema.sql
 
-          SECRET_KEY=$(openssl rand -hex 16)   # Cria secret da app Flask
+          # Gera uma chave secreta para a aplicação Flask.
+          SECRET_KEY=$(openssl rand -hex 16)
 
-          # Cria o serviço do gunicorn pra rodar a aplicação
+          # Cria um arquivo de serviço systemd para gerenciar a aplicação
           cat > /etc/systemd/system/demand-tracker.service <<EOF
           [Unit]
           Description=Gunicorn instance to serve Demand Tracker
@@ -214,6 +224,7 @@ Resources:
           WantedBy=multi-user.target
           EOF
 
+          # Habilita e inicia o serviço
           systemctl daemon-reload
           systemctl enable demand-tracker.service
           systemctl start demand-tracker.service

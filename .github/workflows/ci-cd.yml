@@ -1,0 +1,62 @@
+name: CI/CD Pipeline - Demand Tracker
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test-and-lint:
+    name: Teste e Lint (CI)
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 1. Checkout do código
+      uses: actions/checkout@v3
+
+    - name: 2. Configurar Python 3.9
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.9
+
+    - name: 3. Instalar dependências
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest flake8
+
+    - name: 4. Análise estática com Flake8
+      run: |
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+    - name: 5. Executar testes com Pytest
+      run: |
+        export PYTHONPATH=$PYTHONPATH:$(pwd)
+        pytest tests/
+  
+  cd-instructions:
+    name: Instruções de Deploy (CD)
+    runs-on: ubuntu-latest
+    # Garante que este job só rode após o sucesso do CI
+    needs: test-and-lint
+    # Roda apenas em push para a branch main, não em pull requests
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Exibir instruções de deploy
+        run: |
+          echo "========================================================"
+          echo "PASSO DE CI (TESTE E LINT) CONCLUÍDO COM SUCESSO!"
+          echo "========================================================"
+          echo "O deploy para o ambiente AWS (CD) deve ser iniciado manualmente."
+          echo "Isto é necessário devido às restrições do AWS Academy (sem criação de IAM Roles)."
+          echo ""
+          echo "PASSOS PARA O DEPLOY:"
+          echo "1. Acesse o console do CloudFormation e pegue o IP da 'ManagementInstanceIP'."
+          echo "2. Conecte-se via SSH: ssh -i sua-chave.pem ec2-user@<IP_DA_INSTANCIA>"
+          echo "3. Dentro da instância, execute o script de deploy:"
+          echo "   cd /home/ec2-user/app"
+          echo "   ./deploy.sh"
+          echo ""
+          echo "O script 'deploy.sh' irá construir a imagem Docker, fazer o push para o ECR e atualizar o serviço ECS."

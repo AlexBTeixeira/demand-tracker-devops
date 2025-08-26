@@ -1,40 +1,17 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  Provisiona a infraestrutura para Demand Tracker (VPC, EC2, RDS, S3) - VERSÃO FINAL PARA AWS ACADEMY.
+  Infraestrutura AVANÇADA para Demand Tracker com ECS Fargate, Blue/Green Deploy, Auto-Scaling e Monitoramento.
 
 Parameters:
-  GitHubRepoURL:
-    Type: String
-    Description: A URL HTTPS completa do seu repositório privado no GitHub.
-
-  GitHubPAT:
-    Type: String
-    Description: Seu GitHub Personal Access Token (PAT) com permissão para clonar o repositório.
-    NoEcho: true
-
   DBPassword:
     Type: String
     Description: Senha para o banco de dados RDS (mínimo 8 caracteres alfanuméricos).
     NoEcho: true
     MinLength: 8
     AllowedPattern: "[a-zA-Z0-9]+"
-  
-  SSHKeyName:
-    Type: AWS::EC2::KeyPair::KeyName
-    Description: Nome do seu par de chaves EC2 existente na região para acesso SSH.
-
-  MyIP:
-    Type: String
-    Description: Seu endereço IP para acesso SSH.
-    Default: 0.0.0.0/0
-  
-  LatestAmiId:
-    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
-    Default: '/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-gp2'
-    Description: The latest Amazon Linux 2 AMI ID for the region. Do not change.
 
 Resources:
-  # --- 1. REDE (VPC, SUBNETS, GATEWAYS, ROUTING) ---
+  # --- 1. REDE (Mantida da Fase 1) ---
   VPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -45,7 +22,7 @@ Resources:
         - Key: Name
           Value: !Sub ${AWS::StackName}-VPC
 
-  PublicSubnet:
+  PublicSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
@@ -54,13 +31,24 @@ Resources:
       AvailabilityZone: "us-east-1a"
       Tags:
         - Key: Name
-          Value: !Sub ${AWS::StackName}-PublicSubnet
+          Value: !Sub ${AWS::StackName}-PublicSubnetA
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: "us-east-1b"
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-PublicSubnetB
 
   PrivateSubnetA:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.0.2.0/24
+      CidrBlock: 10.0.3.0/24
       AvailabilityZone: "us-east-1a"
       Tags:
         - Key: Name
@@ -70,7 +58,7 @@ Resources:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
-      CidrBlock: 10.0.3.0/24
+      CidrBlock: 10.0.4.0/24
       AvailabilityZone: "us-east-1b"
       Tags:
         - Key: Name
@@ -78,12 +66,7 @@ Resources:
 
   InternetGateway:
     Type: AWS::EC2::InternetGateway
-    Properties:
-      Tags:
-        - Key: Name
-          Value: !Sub ${AWS::StackName}-IGW
-  
-  AttachGateway:
+  VPCGatewayAttachment:
     Type: AWS::EC2::VPCGatewayAttachment
     Properties:
       VpcId: !Ref VPC
@@ -93,145 +76,24 @@ Resources:
     Type: AWS::EC2::RouteTable
     Properties:
       VpcId: !Ref VPC
-      Tags:
-        - Key: Name
-          Value: !Sub ${AWS::StackName}-PublicRouteTable
-  
   PublicRoute:
     Type: AWS::EC2::Route
-    DependsOn: AttachGateway
     Properties:
       RouteTableId: !Ref PublicRouteTable
       DestinationCidrBlock: 0.0.0.0/0
       GatewayId: !Ref InternetGateway
-  
-  PublicSubnetRouteTableAssociation:
+  PublicSubnetARouteTableAssociation:
     Type: AWS::EC2::SubnetRouteTableAssociation
     Properties:
-      SubnetId: !Ref PublicSubnet
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+  PublicSubnetBRouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetB
       RouteTableId: !Ref PublicRouteTable
 
-  # --- 2. GRUPOS DE SEGURANÇA ---
-  EC2SecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: "Allows SSH and App access to the EC2 instance"
-      VpcId: !Ref VPC
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 22
-          ToPort: 22
-          CidrIp: !Ref MyIP
-        - IpProtocol: tcp
-          FromPort: 5050
-          ToPort: 5050
-          CidrIp: 0.0.0.0/0
-      Tags:
-        - Key: Name
-          Value: !Sub ${AWS::StackName}-EC2-SG
-
-  RDSSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: "Allows MySQL access from the EC2 instance"
-      VpcId: !Ref VPC
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 3306
-          ToPort: 3306
-          SourceSecurityGroupId: !GetAtt EC2SecurityGroup.GroupId
-      Tags:
-        - Key: Name
-          Value: !Sub ${AWS::StackName}-RDS-SG
-
-  # --- INÍCIO DA MODIFICAÇÃO: Recurso Secrets Manager REMOVIDO ---
-  # O GitHubPATSecret foi removido para evitar problemas de permissão.
-  # --- FIM DA MODIFICAÇÃO ---
-
-  # --- 3. S3, EC2, RDS ---
-  AttachmentsBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub "demand-tracker-attachments-${AWS::AccountId}-${AWS::Region}"
-      AccessControl: Private
-  
-  AppServerInstance:
-    Type: AWS::EC2::Instance
-    Properties:
-      InstanceType: t2.micro
-      KeyName: !Ref SSHKeyName
-      ImageId: !Ref LatestAmiId
-      SecurityGroupIds:
-        - !Ref EC2SecurityGroup
-      SubnetId: !Ref PublicSubnet
-      IamInstanceProfile: "LabInstanceProfile"
-      UserData:
-        Fn::Base64: !Sub |
-          #!/bin/bash -xe
-          # Atualiza os pacotes e instala as dependências
-          yum update -y
-          yum install -y git python3 python3-pip mysql gcc python3-devel mariadb-devel
-          pip3 install --upgrade pip
-          
-          # --- INÍCIO DA MODIFICAÇÃO: Usando o PAT diretamente do parâmetro ---
-          # Extrai o caminho do repositório da URL completa
-          REPO_PATH=$(echo "${GitHubRepoURL}" | sed 's|https://||')
-          
-          # Clona o repositório privado usando o PAT passado diretamente pelo parâmetro do CloudFormation.
-          # A variável ${GitHubPAT} é substituída pelo CloudFormation antes do script ser executado.
-          git clone https://${GitHubPAT}@${!REPO_PATH} /home/ec2-user/app
-          # --- FIM DA MODIFICAÇÃO ---
-          
-          # Altera o proprietário dos arquivos para o usuário ec2-user
-          chown -R ec2-user:ec2-user /home/ec2-user/app
-          
-          cd /home/ec2-user/app
-          
-          # Instala as dependências do Python
-          pip3 install -r requirements.txt
-          
-          # Espera o banco de dados RDS estar acessível
-          while ! mysql -h ${AppDatabase.Endpoint.Address} -u admin -p${DBPassword} -e "SELECT 1"; do
-            echo "Aguardando o banco de dados ficar disponível..."
-            sleep 5
-          done
-          
-          # Executa o script SQL para criar as tabelas
-          mysql -h ${AppDatabase.Endpoint.Address} -u admin -p${DBPassword} demandtrackerdb < sql/schema.sql
-
-          # Gera uma chave secreta para a aplicação Flask.
-          SECRET_KEY=$(openssl rand -hex 16)
-
-          # Cria um arquivo de serviço systemd para gerenciar a aplicação
-          cat > /etc/systemd/system/demand-tracker.service <<EOF
-          [Unit]
-          Description=Gunicorn instance to serve Demand Tracker
-          After=network.target
-
-          [Service]
-          User=ec2-user
-          Group=ec2-user
-          WorkingDirectory=/home/ec2-user/app
-          Environment="MYSQL_HOST=${AppDatabase.Endpoint.Address}"
-          Environment="MYSQL_USER=admin"
-          Environment="MYSQL_PASSWORD=${DBPassword}"
-          Environment="MYSQL_DB=demandtrackerdb"
-          Environment="S3_BUCKET=${AttachmentsBucket}"
-          Environment="SECRET_KEY=${!SECRET_KEY}"
-          ExecStart=/usr/local/bin/gunicorn --workers 3 --bind 0.0.0.0:5050 wsgi:app
-
-          [Install]
-          WantedBy=multi-user.target
-          EOF
-
-          # Habilita e inicia o serviço
-          systemctl daemon-reload
-          systemctl enable demand-tracker.service
-          systemctl start demand-tracker.service
-      Tags:
-        - Key: Name
-          Value: !Sub ${AWS::StackName}-AppServer
-
+  # --- 2. BANCO DE DADOS (RDS - Levemente modificado) ---
   DBSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
@@ -239,12 +101,21 @@ Resources:
       SubnetIds:
         - !Ref PrivateSubnetA
         - !Ref PrivateSubnetB
-  
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allows MySQL access from the ECS tasks"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref ECSServiceSecurityGroup # Alterado para o SG do serviço ECS
   AppDatabase:
     Type: AWS::RDS::DBInstance
     Properties:
       DBInstanceIdentifier: !Sub "${AWS::StackName}-db"
-      DBName: demandtrackerdb 
+      DBName: demandtrackerdb
       AllocatedStorage: 20
       DBInstanceClass: db.t3.micro
       Engine: mysql
@@ -256,17 +127,321 @@ Resources:
         - !Ref RDSSecurityGroup
       PubliclyAccessible: false
       MultiAZ: false
-      Tags:
-        - Key: Name
-          Value: !Sub ${AWS::StackName}-Database
 
+  # --- 3. S3 Bucket (Mantido) ---
+  AttachmentsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "demand-tracker-attachments-${AWS::AccountId}-${AWS::Region}"
+      AccessControl: Private
+  
+  # --- 4. IAM Roles para ECS e CodeDeploy ---
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ecs-tasks.amazonaws.com]
+            Action: ['sts:AssumeRole']
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+  
+  ECSTaskRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: [ecs-tasks.amazonaws.com]
+              Action: ['sts:AssumeRole']
+        Policies:
+          - PolicyName: S3AccessPolicy
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: ['s3:GetObject', 's3:PutObject', 's3:DeleteObject']
+                  Resource: !Sub "arn:aws:s3:::${AttachmentsBucket}/*"
+
+  CodeDeployRole:
+      Type: AWS::IAM::Role
+      Properties:
+          AssumeRolePolicyDocument:
+              Statement:
+                  - Effect: Allow
+                    Principal:
+                        Service: [codedeploy.amazonaws.com]
+                    Action: ['sts:AssumeRole']
+          ManagedPolicyArns:
+              - arn:aws:iam::aws:policy/AWSCodeDeployRoleForECS
+
+  # --- 5. ECR - Registro de Imagens Docker ---
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${AWS::StackName}-repo"
+  
+  # --- 6. ECS Cluster e Load Balancer ---
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub "${AWS::StackName}-cluster"
+
+  LoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub "${AWS::StackName}-alb"
+      Subnets: [!Ref PublicSubnetA, !Ref PublicSubnetB]
+      SecurityGroups: [!Ref LoadBalancerSecurityGroup]
+
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow HTTP traffic to ALB"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+  
+  ECSServiceSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Allow traffic from ALB to ECS tasks"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5050 # A porta da aplicação
+          ToPort: 5050
+          SourceSecurityGroupId: !Ref LoadBalancerSecurityGroup
+
+  TargetGroupBlue:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub "${AWS::StackName}-tg-blue"
+      VpcId: !Ref VPC
+      Protocol: HTTP
+      Port: 5050
+      HealthCheckPath: "/"
+      TargetType: ip
+      
+  TargetGroupGreen:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub "${AWS::StackName}-tg-green"
+      VpcId: !Ref VPC
+      Protocol: HTTP
+      Port: 5050
+      HealthCheckPath: "/"
+      TargetType: ip
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Protocol: HTTP
+      Port: 80
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroupBlue
+
+  # --- 7. Task Definition e ECS Service ---
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub "${AWS::StackName}-task"
+      Cpu: "256" # 0.25 vCPU
+      Memory: "512" # 0.5 GB
+      NetworkMode: awsvpc
+      RequiresCompatibilities: ["FARGATE"]
+      ExecutionRoleArn: !Ref ECSTaskExecutionRole
+      TaskRoleArn: !Ref ECSTaskRole
+      ContainerDefinitions:
+        - Name: "demand-tracker-container"
+          Image: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepository}:latest"
+          PortMappings:
+            - ContainerPort: 5050
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs
+          Environment:
+            - Name: MYSQL_HOST
+              Value: !GetAtt AppDatabase.Endpoint.Address
+            - Name: MYSQL_USER
+              Value: "admin"
+            - Name: MYSQL_PASSWORD
+              Value: !Ref DBPassword
+            - Name: MYSQL_DB
+              Value: "demandtrackerdb"
+            - Name: S3_BUCKET
+              Value: !Ref AttachmentsBucket
+            - Name: SECRET_KEY
+              Value: "uma-chave-secreta-de-exemplo-para-cloudformation" # Idealmente, usar Secrets Manager
+  
+  ECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      ServiceName: !Sub "${AWS::StackName}-service"
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref TaskDefinition
+      LaunchType: FARGATE
+      DesiredCount: 2 # Começa com 2 instâncias para alta disponibilidade
+      DeploymentController:
+          Type: CODE_DEPLOY
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          Subnets: [!Ref PublicSubnetA, !Ref PublicSubnetB]
+          SecurityGroups: [!Ref ECSServiceSecurityGroup]
+      LoadBalancers:
+        - TargetGroupArn: !Ref TargetGroupBlue
+          ContainerName: "demand-tracker-container"
+          ContainerPort: 5050
+  
+  # --- 8. Auto-Scaling ---
+  ECSServiceScalableTarget:
+      Type: AWS::ApplicationAutoScaling::ScalableTarget
+      Properties:
+          MaxCapacity: 6
+          MinCapacity: 2
+          ResourceId: !Join ["/", [service, !Ref ECSCluster, !GetAtt ECSService.Name]]
+          RoleARN: !Sub "arn:aws:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService"
+          ScalableDimension: ecs:service:DesiredCount
+          ServiceNamespace: ecs
+
+  ECSServiceScalingPolicy:
+      Type: AWS::ApplicationAutoScaling::ScalingPolicy
+      Properties:
+          PolicyName: !Sub "${AWS::StackName}-cpu-scaling-policy"
+          PolicyType: TargetTrackingScaling
+          ScalingTargetId: !Ref ECSServiceScalableTarget
+          TargetTrackingScalingPolicyConfiguration:
+              TargetValue: 75.0 # Manter CPU em 75%
+              ScaleInCooldown: 60
+              ScaleOutCooldown: 60
+              PredefinedMetricSpecification:
+                  PredefinedMetricType: ECSServiceAverageCPUUtilization
+
+  # --- 9. CodeDeploy para Blue/Green ---
+  CodeDeployApplication:
+      Type: AWS::CodeDeploy::Application
+      Properties:
+          ApplicationName: !Sub "${AWS::StackName}-app"
+          ComputePlatform: ECS
+          
+  CodeDeployDeploymentGroup:
+      Type: AWS::CodeDeploy::DeploymentGroup
+      Properties:
+          ApplicationName: !Ref CodeDeployApplication
+          DeploymentGroupName: !Sub "${AWS::StackName}-dg"
+          ServiceRoleArn: !GetAtt CodeDeployRole.Arn
+          DeploymentStyle:
+              DeploymentType: BLUE_GREEN
+              DeploymentOption: WITH_TRAFFIC_CONTROL
+          BlueGreenDeploymentConfiguration:
+              TerminateBlueInstancesOnDeploymentSuccess:
+                  Action: TERMINATE
+                  TerminationWaitTimeInMinutes: 5
+              DeploymentReadyOption:
+                  ActionOnTimeout: CONTINUE_DEPLOYMENT
+          ECSServices:
+              - ClusterName: !Ref ECSCluster
+                ServiceName: !GetAtt ECSService.Name
+          LoadBalancerInfo:
+              TargetGroupPairInfoList:
+                  - TargetGroups:
+                      - Name: !Ref TargetGroupBlue
+                      - Name: !Ref TargetGroupGreen
+                    ProdTrafficRoute:
+                        ListenerArns:
+                            - !Ref Listener
+  
+  # --- 10. Monitoramento e Logging ---
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${AWS::StackName}"
+      RetentionInDays: 7
+      
+  ALB5xxErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "${AWS::StackName}-ALB-5xx-Errors"
+      AlarmDescription: "Alarme para erros 5xx no Application Load Balancer"
+      Namespace: AWS/ApplicationELB
+      MetricName: HTTPCode_Target_5XX_Count
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !GetAtt LoadBalancer.LoadBalancerFullName
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      AlarmActions: [] # Adicionar ARN de um tópico SNS para notificações
+
+  CloudWatchDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub "${AWS::StackName}-Dashboard"
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0, "y": 0, "width": 12, "height": 6,
+              "properties": {
+                "metrics": [
+                  ["AWS/ECS", "CPUUtilization", "ClusterName", "${ECSCluster}", "ServiceName", "${ECSService.Name}"]
+                ],
+                "period": 300, "stat": "Average", "region": "${AWS::Region}", "title": "ECS Service CPU Utilization"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12, "y": 0, "width": 12, "height": 6,
+              "properties": {
+                "metrics": [
+                  ["AWS/ECS", "MemoryUtilization", "ClusterName", "${ECSCluster}", "ServiceName", "${ECSService.Name}"]
+                ],
+                "period": 300, "stat": "Average", "region": "${AWS::Region}", "title": "ECS Service Memory Utilization"
+              }
+            },
+            {
+                "type": "metric",
+                "x": 0, "y": 6, "width": 12, "height": 6,
+                "properties": {
+                    "metrics": [
+                        [ "AWS/ApplicationELB", "RequestCount", "LoadBalancer", "${LoadBalancer.LoadBalancerFullName}" ]
+                    ],
+                    "period": 300, "stat": "Sum", "region": "${AWS::Region}", "title": "ALB Request Count"
+                }
+            },
+            {
+                "type": "metric",
+                "x": 12, "y": 6, "width": 12, "height": 6,
+                "properties": {
+                    "metrics": [
+                        [ "AWS/ApplicationELB", "HTTPCode_Target_5XX_Count", "LoadBalancer", "${LoadBalancer.LoadBalancerFullName}" ]
+                    ],
+                    "period": 60, "stat": "Sum", "region": "${AWS::Region}", "title": "ALB 5xx Errors"
+                }
+            }
+          ]
+        }
+        
 Outputs:
-  EC2PublicIP:
-    Description: "IP Público do servidor da aplicação"
-    Value: !GetAtt AppServerInstance.PublicIp
-  RDSEndpoint:
-    Description: "Endpoint do banco de dados RDS"
-    Value: !GetAtt AppDatabase.Endpoint.Address
-  S3BucketName:
-    Description: "Nome do bucket S3 para anexos"
-    Value: !Ref AttachmentsBucket
+  ALBDnsName:
+    Description: "DNS do Application Load Balancer"
+    Value: !GetAtt LoadBalancer.DNSName
+  ECRRepositoryUri:
+    Description: "URI do repositório ECR"
+    Value: !Sub "${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepository}"
+  CloudWatchDashboardURL:
+    Description: "URL do Dashboard do CloudWatch"
+    Value: !Sub "https://console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${AWS::StackName}-Dashboard"
