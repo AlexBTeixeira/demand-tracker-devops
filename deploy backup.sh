@@ -1,5 +1,5 @@
 #!/bin/bash
-# deploy.sh (Tentativa de reintroduzir as roles)
+# deploy.sh (Versão final usando LabRole conforme documentação)
 
 set -e
 
@@ -40,17 +40,14 @@ docker tag $ECR_REPOSITORY_URI:latest $ECR_REPOSITORY_URI:$IMAGE_TAG
 docker push $ECR_REPOSITORY_URI:$IMAGE_TAG
 docker push $ECR_REPOSITORY_URI:latest
 
-# --- PASSO 3: CRIAR/ATUALIZAR A TASK DEFINITION (COM ROLES) ---
-echo "Criando nova revisão da Task Definition (com roles)..."
+# --- PASSO 3: CRIAR/ATUALIZAR A TASK DEFINITION ---
+echo "Criando nova revisão da Task Definition (usando LabRole)..."
 DB_PASSWORD=$(cat /home/ec2-user/db_secret.txt)
 TASK_DEF_JSON_PATH="/home/ec2-user/app/task-definition.json"
 
-# --- INÍCIO DA MODIFICAÇÃO: Definindo os ARNs das roles pré-existentes ---
-# A ecsTaskExecutionRole é padrão e deve existir no AWS Academy para o ECS funcionar.
-EXECUTION_ROLE_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/ecsTaskExecutionRole"
-# Usamos a LabRole, que a instância já tem, para dar permissões de S3 ao container.
-TASK_ROLE_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/LabRole"
-# --- FIM DA MODIFICAÇÃO ---
+# --- A MUDANÇA CRÍTICA ESTÁ AQUI ---
+# Conforme a documentação do Learner Lab, devemos usar 'LabRole' para ambos os campos.
+ROLE_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/LabRole"
 
 # Gerar o arquivo JSON
 cat > ${TASK_DEF_JSON_PATH} <<EOF
@@ -60,8 +57,8 @@ cat > ${TASK_DEF_JSON_PATH} <<EOF
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "256",
   "memory": "512",
-  "executionRoleArn": "${EXECUTION_ROLE_ARN}",
-  "taskRoleArn": "${TASK_ROLE_ARN}",
+  "executionRoleArn": "${ROLE_ARN}",
+  "taskRoleArn": "${ROLE_ARN}",
   "containerDefinitions": [
     {
       "name": "demand-tracker-container",
@@ -99,7 +96,6 @@ aws ecs register-task-definition --cli-input-json file://${TASK_DEF_JSON_PATH} >
 
 # --- PASSO 4: CRIAR/ATUALIZAR O SERVIÇO ECS ---
 echo "Verificando o serviço ECS..."
-# ... (o resto do script permanece o mesmo)
 SERVICE_EXISTS=$(aws ecs describe-services --cluster $ECS_CLUSTER_NAME --services $ECS_SERVICE_NAME --query "services[?status!='INACTIVE'] | length(@)")
 SUBNET_ID=$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=${STACK_NAME}-PublicSubnet" --query "Subnets[0].SubnetId" --output text)
 SECURITY_GROUP_ID=$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=${STACK_NAME}-ECS-Service-SG" --query "SecurityGroups[0].GroupId" --output text)

@@ -268,6 +268,15 @@ Resources:
     Properties:
       ClusterName: !Sub "${AWS::StackName}-cluster"
 
+
+  # 6. LOGGING
+  ECSLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/demand-tracker-task"
+      # Define a retenção dos logs para 7 dias para não acumular custos/dados indefinidamente
+      RetentionInDays: 7
+
 Outputs:
   ManagementInstanceIP:
     Description: "IP Público da Instância de Gerenciamento para SSH"
