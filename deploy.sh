@@ -1,5 +1,5 @@
 #!/bin/bash
-# deploy.sh (versão final com correção no caminho do JSON)
+# deploy.sh (Versão final usando LabRole conforme documentação)
 
 set -e
 
@@ -41,12 +41,13 @@ docker push $ECR_REPOSITORY_URI:$IMAGE_TAG
 docker push $ECR_REPOSITORY_URI:latest
 
 # --- PASSO 3: CRIAR/ATUALIZAR A TASK DEFINITION ---
-echo "Criando nova revisão da Task Definition..."
+echo "Criando nova revisão da Task Definition (usando LabRole)..."
 DB_PASSWORD=$(cat /home/ec2-user/db_secret.txt)
-
-# --- INÍCIO DA MODIFICAÇÃO ---
-# Definir um caminho absoluto para o arquivo JSON para evitar ambiguidades
 TASK_DEF_JSON_PATH="/home/ec2-user/app/task-definition.json"
+
+# --- A MUDANÇA CRÍTICA ESTÁ AQUI ---
+# Conforme a documentação do Learner Lab, devemos usar 'LabRole' para ambos os campos.
+ROLE_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/LabRole"
 
 # Gerar o arquivo JSON
 cat > ${TASK_DEF_JSON_PATH} <<EOF
@@ -56,6 +57,8 @@ cat > ${TASK_DEF_JSON_PATH} <<EOF
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "256",
   "memory": "512",
+  "executionRoleArn": "${ROLE_ARN}",
+  "taskRoleArn": "${ROLE_ARN}",
   "containerDefinitions": [
     {
       "name": "demand-tracker-container",
@@ -88,13 +91,11 @@ cat > ${TASK_DEF_JSON_PATH} <<EOF
 }
 EOF
 
-# Registra a nova definição de tarefa usando o caminho absoluto
+# Registra a nova definição de tarefa
 aws ecs register-task-definition --cli-input-json file://${TASK_DEF_JSON_PATH} > /dev/null
-# --- FIM DA MODIFICAÇÃO ---
 
 # --- PASSO 4: CRIAR/ATUALIZAR O SERVIÇO ECS ---
 echo "Verificando o serviço ECS..."
-# ... (o resto do script permanece o mesmo)
 SERVICE_EXISTS=$(aws ecs describe-services --cluster $ECS_CLUSTER_NAME --services $ECS_SERVICE_NAME --query "services[?status!='INACTIVE'] | length(@)")
 SUBNET_ID=$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=${STACK_NAME}-PublicSubnet" --query "Subnets[0].SubnetId" --output text)
 SECURITY_GROUP_ID=$(aws ec2 describe-security-groups --filters "Name=tag:Name,Values=${STACK_NAME}-ECS-Service-SG" --query "SecurityGroups[0].GroupId" --output text)
