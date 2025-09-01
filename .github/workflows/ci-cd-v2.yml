@@ -30,7 +30,7 @@ jobs:
 
     - name: 📦 Cache de dependências pip
       id: cache-deps
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cache/pip
@@ -86,7 +86,7 @@ jobs:
         bandit -r . -f json -o bandit-report.json -x "*/tests/*,*/venv/*" || true
 
     - name: 📊 Upload dos relatórios de segurança
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: security-reports
@@ -138,7 +138,7 @@ jobs:
         flake8 . --count --max-complexity=10 --max-line-length=88 --statistics
 
     - name: 📊 Upload do relatório Flake8
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: flake8-report
@@ -192,7 +192,7 @@ jobs:
         name: codecov-umbrella
 
     - name: 📋 Upload dos relatórios de teste
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: always()
       with:
         name: test-reports-python-${{ matrix.python-version }}
@@ -287,7 +287,7 @@ jobs:
         docker save demand-tracker:${{ github.sha }} > demand-tracker-image.tar
 
     - name: 📦 Upload do artefato Docker
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       if: hashFiles('dockerfile') != '' || hashFiles('Dockerfile') != ''
       with:
         name: docker-image
