@@ -1,0 +1,362 @@
+name: CI/CD Pipeline v2 - Demand Tracker (Melhorado)
+
+on:
+  push:
+    branches: [ "main", "develop" ]
+  pull_request:
+    branches: [ "main", "develop" ]
+
+env:
+  PYTHON_VERSION: "3.9"
+  POETRY_VERSION: "1.6.1"
+
+jobs:
+  # Job de preparação e cache de dependências
+  setup:
+    name: 🔧 Setup e Cache de Dependências
+    runs-on: ubuntu-latest
+    outputs:
+      cache-hit: ${{ steps.cache-deps.outputs.cache-hit }}
+      
+    steps:
+    - name: 📥 Checkout do código
+      uses: actions/checkout@v4
+
+    - name: 🐍 Configurar Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: 📦 Cache de dependências pip
+      id: cache-deps
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/pip
+          venv
+        key: ${{ runner.os }}-python-${{ env.PYTHON_VERSION }}-${{ hashFiles('requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-python-${{ env.PYTHON_VERSION }}-
+
+    - name: 🔨 Criar ambiente virtual e instalar dependências
+      if: steps.cache-deps.outputs.cache-hit != 'true'
+      run: |
+        python -m venv venv
+        source venv/bin/activate
+        python -m pip install --upgrade pip setuptools wheel
+        pip install -r requirements.txt
+        pip install pytest flake8 black isort bandit safety coverage pytest-cov pytest-xdist
+
+  # Job de análise de segurança
+  security:
+    name: 🔒 Análise de Segurança
+    runs-on: ubuntu-latest
+    needs: setup
+    
+    steps:
+    - name: 📥 Checkout do código
+      uses: actions/checkout@v4
+
+    - name: 🐍 Configurar Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: 📦 Restaurar cache de dependências
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/pip
+          venv
+        key: ${{ runner.os }}-python-${{ env.PYTHON_VERSION }}-${{ hashFiles('requirements.txt') }}
+
+    - name: 🔧 Ativar ambiente virtual
+      run: source venv/bin/activate
+
+    - name: 🛡️ Verificar vulnerabilidades com Safety
+      run: |
+        source venv/bin/activate
+        safety check --json --output safety-report.json || true
+
+    - name: 🔍 Análise de segurança com Bandit
+      run: |
+        source venv/bin/activate
+        bandit -r . -f json -o bandit-report.json -x "*/tests/*,*/venv/*" || true
+
+    - name: 📊 Upload dos relatórios de segurança
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: security-reports
+        path: |
+          safety-report.json
+          bandit-report.json
+
+  # Job de qualidade de código
+  code-quality:
+    name: 📋 Qualidade de Código
+    runs-on: ubuntu-latest
+    needs: setup
+
+    steps:
+    - name: 📥 Checkout do código
+      uses: actions/checkout@v4
+
+    - name: 🐍 Configurar Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: 📦 Restaurar cache de dependências
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/pip
+          venv
+        key: ${{ runner.os }}-python-${{ env.PYTHON_VERSION }}-${{ hashFiles('requirements.txt') }}
+
+    - name: 🔧 Ativar ambiente virtual
+      run: source venv/bin/activate
+
+    - name: ⚫ Verificar formatação com Black
+      run: |
+        source venv/bin/activate
+        black --check --diff .
+
+    - name: 📐 Verificar imports com isort
+      run: |
+        source venv/bin/activate
+        isort --check-only --diff .
+
+    - name: 🔍 Análise estática com Flake8
+      run: |
+        source venv/bin/activate
+        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --format=json --output-file=flake8-report.json || true
+        flake8 . --count --max-complexity=10 --max-line-length=88 --statistics
+
+    - name: 📊 Upload do relatório Flake8
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: flake8-report
+        path: flake8-report.json
+
+  # Job de testes unitários
+  unit-tests:
+    name: 🧪 Testes Unitários
+    runs-on: ubuntu-latest
+    needs: setup
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11"]
+      fail-fast: false
+
+    steps:
+    - name: 📥 Checkout do código
+      uses: actions/checkout@v4
+
+    - name: 🐍 Configurar Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+
+    - name: 🔨 Instalar dependências
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest coverage pytest-cov pytest-xdist pytest-html
+
+    - name: 🧪 Executar testes com cobertura
+      run: |
+        export PYTHONPATH=$PYTHONPATH:$(pwd)
+        pytest tests/ \
+          --cov=. \
+          --cov-report=xml \
+          --cov-report=html \
+          --cov-report=term-missing \
+          --junit-xml=pytest-results.xml \
+          --html=pytest-report.html \
+          --self-contained-html \
+          -v
+
+    - name: 📊 Upload da cobertura para Codecov
+      uses: codecov/codecov-action@v3
+      if: matrix.python-version == '3.9'
+      with:
+        file: coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+
+    - name: 📋 Upload dos relatórios de teste
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-reports-python-${{ matrix.python-version }}
+        path: |
+          coverage.xml
+          htmlcov/
+          pytest-results.xml
+          pytest-report.html
+
+  # Job de testes de integração (se existirem)
+  integration-tests:
+    name: 🔗 Testes de Integração
+    runs-on: ubuntu-latest
+    needs: [setup, unit-tests]
+    if: always() && needs.unit-tests.result == 'success'
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: test_password
+          MYSQL_DATABASE: test_db
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=3
+
+    steps:
+    - name: 📥 Checkout do código
+      uses: actions/checkout@v4
+
+    - name: 🐍 Configurar Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: 🔨 Instalar dependências
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest
+
+    - name: 🗄️ Configurar banco de dados de teste
+      run: |
+        mysql -h127.0.0.1 -uroot -ptest_password test_db < sql/schema.sql
+      if: hashFiles('sql/schema.sql') != ''
+
+    - name: 🔗 Executar testes de integração
+      env:
+        DATABASE_URL: mysql://root:test_password@127.0.0.1:3306/test_db
+      run: |
+        export PYTHONPATH=$PYTHONPATH:$(pwd)
+        # Assumindo que testes de integração estão marcados com @pytest.mark.integration
+        pytest tests/ -m integration -v
+      continue-on-error: true
+
+  # Job de build da aplicação
+  build:
+    name: 🏗️ Build da Aplicação
+    runs-on: ubuntu-latest
+    needs: [security, code-quality, unit-tests]
+    if: always() && needs.unit-tests.result == 'success'
+
+    steps:
+    - name: 📥 Checkout do código
+      uses: actions/checkout@v4
+
+    - name: 🐍 Configurar Python ${{ env.PYTHON_VERSION }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: 🔨 Instalar dependências
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: 🏗️ Build da aplicação
+      run: |
+        python -m compileall .
+        echo "Build concluído com sucesso!"
+
+    - name: 🐳 Build da imagem Docker (se Dockerfile existir)
+      if: hashFiles('dockerfile') != '' || hashFiles('Dockerfile') != ''
+      run: |
+        docker build -t demand-tracker:${{ github.sha }} .
+        docker save demand-tracker:${{ github.sha }} > demand-tracker-image.tar
+
+    - name: 📦 Upload do artefato Docker
+      uses: actions/upload-artifact@v3
+      if: hashFiles('dockerfile') != '' || hashFiles('Dockerfile') != ''
+      with:
+        name: docker-image
+        path: demand-tracker-image.tar
+
+  # Job de resumo e relatório final
+  ci-summary:
+    name: 📊 Resumo do CI
+    runs-on: ubuntu-latest
+    needs: [security, code-quality, unit-tests, integration-tests, build]
+    if: always()
+
+    steps:
+    - name: 📋 Exibir resumo dos jobs
+      run: |
+        echo "========================================================"
+        echo "           RESUMO DO PIPELINE CI v2"
+        echo "========================================================"
+        echo "🔒 Segurança: ${{ needs.security.result }}"
+        echo "📋 Qualidade de Código: ${{ needs.code-quality.result }}"
+        echo "🧪 Testes Unitários: ${{ needs.unit-tests.result }}"
+        echo "🔗 Testes de Integração: ${{ needs.integration-tests.result }}"
+        echo "🏗️ Build: ${{ needs.build.result }}"
+        echo "========================================================"
+        
+        if [[ "${{ needs.unit-tests.result }}" == "success" && "${{ needs.build.result }}" == "success" ]]; then
+          echo "✅ CI PASSOU COM SUCESSO!"
+          echo "A aplicação está pronta para deploy."
+        else
+          echo "❌ CI FALHOU!"
+          echo "Verifique os jobs que falharam antes de fazer o deploy."
+          exit 1
+        fi
+
+  # Job de instruções de deploy (mantendo o CD original)
+  cd-instructions:
+    name: 📋 Instruções de Deploy (CD)
+    runs-on: ubuntu-latest
+    needs: [ci-summary]
+    if: >
+      always() && 
+      needs.ci-summary.result == 'success' &&
+      github.event_name == 'push' && 
+      github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: 📢 Exibir instruções de deploy
+        run: |
+          echo "========================================================"
+          echo "PASSO DE CI (TESTE E LINT) CONCLUÍDO COM SUCESSO!"
+          echo "========================================================"
+          echo "O deploy para o ambiente AWS (CD) deve ser iniciado manualmente."
+          echo "Isto é necessário devido às restrições do AWS Academy (sem criação de IAM Roles)."
+          echo ""
+          echo "PASSOS PARA O DEPLOY:"
+          echo "1. Acesse o console do CloudFormation e pegue o IP da 'ManagementInstanceIP'."
+          echo "2. Conecte-se via SSH: ssh -i sua-chave.pem ec2-user@<IP_DA_INSTANCIA>"
+          echo "3. Dentro da instância, execute o script de deploy:"
+          echo "   cd /home/ec2-user/app"
+          echo "   ./deploy.sh"
+          echo ""
+          echo "O script 'deploy.sh' irá construir a imagem Docker, fazer o push para o ECR e atualizar o serviço ECS."
+          echo ""
+          echo "🆕 MELHORIAS NO CI v2:"
+          echo "- ✅ Cache de dependências para builds mais rápidos"
+          echo "- ✅ Análise de segurança (Safety + Bandit)"
+          echo "- ✅ Verificação de formatação (Black + isort)"
+          echo "- ✅ Testes em múltiplas versões do Python"
+          echo "- ✅ Cobertura de código detalhada"
+          echo "- ✅ Relatórios HTML de testes"
+          echo "- ✅ Artefatos para análise posterior"
+          echo "- ✅ Jobs paralelos para performance"

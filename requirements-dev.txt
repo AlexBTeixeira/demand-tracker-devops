@@ -1,0 +1,12 @@
+# Dependências de desenvolvimento e testes
+pytest==7.4.4
+pytest-cov==4.1.0
+pytest-xdist==3.3.1
+pytest-html==4.1.1
+coverage==7.3.2
+flake8==6.1.0
+black==23.12.1
+isort==5.13.2
+bandit==1.7.5
+safety==2.3.5
+pre-commit==3.6.0
