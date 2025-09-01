@@ -65,7 +65,7 @@ jobs:
         cache: 'pip'
 
     - name: 📦 Restaurar cache de dependências
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cache/pip
@@ -111,7 +111,7 @@ jobs:
         cache: 'pip'
 
     - name: 📦 Restaurar cache de dependências
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: |
           ~/.cache/pip
@@ -121,15 +121,19 @@ jobs:
     - name: 🔧 Ativar ambiente virtual
       run: source venv/bin/activate
 
-    - name: ⚫ Verificar formatação com Black
+    - name: ⚫ Verificar e formatar código com Black
       run: |
         source venv/bin/activate
-        black --check --diff .
+        # Primeiro tenta formatar, depois verifica se há mudanças
+        black --diff . || true
+        black --check --diff . || (echo "❌ Arquivos precisam ser formatados com Black. Execute: black ." && exit 1)
 
-    - name: 📐 Verificar imports com isort
+    - name: 📐 Verificar e organizar imports com isort
       run: |
         source venv/bin/activate
-        isort --check-only --diff .
+        # Primeiro tenta organizar, depois verifica se há mudanças
+        isort --diff . || true
+        isort --check-only --diff . || (echo "❌ Imports precisam ser organizados com isort. Execute: isort ." && exit 1)
 
     - name: 🔍 Análise estática com Flake8
       run: |
@@ -184,7 +188,7 @@ jobs:
           -v
 
     - name: 📊 Upload da cobertura para Codecov
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       if: matrix.python-version == '3.9'
       with:
         file: coverage.xml

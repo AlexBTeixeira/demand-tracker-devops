@@ -5,7 +5,8 @@ from flask import Flask, redirect, url_for, request
 import MySQLdb.cursors
 from config import Config
 from extensions import mysql, User
-#, login_manager, 
+
+# , login_manager,
 
 # Import Blueprints
 from blueprints.auth import auth_bp
@@ -13,9 +14,10 @@ from blueprints.demands import demands_bp
 from blueprints.tracker import tracker_bp
 from blueprints.reports import reports_bp
 
+
 def create_app(config_class=Config):
     BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-    
+
     app = Flask(
         __name__,
         template_folder=os.path.join(BASE_DIR, "templates"),
@@ -32,12 +34,13 @@ def create_app(config_class=Config):
         return redirect(url_for("demands.dashboard"))
 
     # Registra os Blueprints
-    app.register_blueprint(auth_bp, url_prefix='/auth')
-    app.register_blueprint(demands_bp, url_prefix='/demands')
-    app.register_blueprint(tracker_bp, url_prefix='/tracker')
-    app.register_blueprint(reports_bp, url_prefix='/reports')
-    
+    app.register_blueprint(auth_bp, url_prefix="/auth")
+    app.register_blueprint(demands_bp, url_prefix="/demands")
+    app.register_blueprint(tracker_bp, url_prefix="/tracker")
+    app.register_blueprint(reports_bp, url_prefix="/reports")
+
     return app
+
 
 # Bloco para execução local (desenvolvimento)
 if __name__ == "__main__":

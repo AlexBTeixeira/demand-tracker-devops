@@ -1,10 +1,12 @@
 # extensions.py
 from flask_mysqldb import MySQL
-#from flask_login import LoginManager, 
+
+# from flask_login import LoginManager,
 from flask_login import UserMixin
 
 mysql = MySQL()
-#login_manager = LoginManager()
+# login_manager = LoginManager()
+
 
 class User(UserMixin):
     def __init__(self, id, username, name, password_hash):
