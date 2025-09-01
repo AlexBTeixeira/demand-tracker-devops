@@ -1,8 +1,7 @@
 # extensions.py
-from flask_mysqldb import MySQL
-
 # from flask_login import LoginManager,
 from flask_login import UserMixin
+from flask_mysqldb import MySQL
 
 mysql = MySQL()
 # login_manager = LoginManager()

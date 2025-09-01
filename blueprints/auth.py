@@ -1,10 +1,8 @@
 # blueprints/auth.py
-from flask import Blueprint, render_template, request, redirect, url_for, flash
-from werkzeug.security import check_password_hash
-from flask_login import login_user, logout_user, login_required
 import MySQLdb.cursors
+from flask import Blueprint, flash, redirect, render_template, request, url_for
 
-from extensions import mysql, User
+from extensions import User, mysql
 
 auth_bp = Blueprint("auth", __name__)
 

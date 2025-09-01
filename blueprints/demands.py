@@ -1,22 +1,22 @@
 # blueprints/demands.py
-import os
 import traceback
+
+import boto3
+import MySQLdb.cursors
+from botocore.exceptions import NoCredentialsError
 from flask import (
     Blueprint,
+    current_app,
+    flash,
+    jsonify,
+    redirect,
     render_template,
     request,
-    jsonify,
-    flash,
-    current_app,
-    redirect,
     url_for,
-    send_from_directory,
 )
 from werkzeug.utils import secure_filename
-import MySQLdb.cursors
+
 from extensions import mysql
-import boto3
-from botocore.exceptions import NoCredentialsError
 
 s3_client = boto3.client("s3")
 

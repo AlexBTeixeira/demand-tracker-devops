@@ -1,7 +1,9 @@
 # blueprints/tracker.py
-from flask import Blueprint, render_template, request, jsonify, flash, redirect, url_for
 from datetime import datetime
+
 import MySQLdb.cursors
+from flask import Blueprint, flash, jsonify, render_template, request
+
 from extensions import mysql
 
 tracker_bp = Blueprint("tracker", __name__)

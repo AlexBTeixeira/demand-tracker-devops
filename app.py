@@ -1,18 +1,18 @@
 # app.py
 import os
-import time
-from flask import Flask, redirect, url_for, request
-import MySQLdb.cursors
-from config import Config
-from extensions import mysql, User
 
-# , login_manager,
+from flask import Flask, redirect, url_for
 
 # Import Blueprints
 from blueprints.auth import auth_bp
 from blueprints.demands import demands_bp
-from blueprints.tracker import tracker_bp
 from blueprints.reports import reports_bp
+from blueprints.tracker import tracker_bp
+from config import Config
+from extensions import mysql
+
+# , login_manager,
+
 
 
 def create_app(config_class=Config):

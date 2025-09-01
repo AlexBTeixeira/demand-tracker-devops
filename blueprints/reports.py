@@ -1,4 +1,9 @@
 # blueprints/reports.py
+import io
+from datetime import datetime
+
+import MySQLdb.cursors
+import pandas as pd
 from flask import (
     Blueprint,
     flash,
@@ -8,11 +13,8 @@ from flask import (
     send_file,
     url_for,
 )
-import MySQLdb.cursors
+
 from extensions import mysql
-import pandas as pd
-import io
-from datetime import datetime
 
 reports_bp = Blueprint("reports", __name__)
 
