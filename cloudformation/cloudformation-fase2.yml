@@ -36,8 +36,7 @@ Parameters:
     Description: "ID da AMI mais recente do Amazon Linux 2 (via SSM Parameter Store)."
 
 Resources:
-  # --- 1. REDE (VPC, SUBNETS, IGW, ROUTING) - Sem alterações ---
-  # ... (copie a seção 1, 2 e 3 do arquivo anterior, não há mudanças aqui)
+  # --- 1. REDE (VPC, SUBNETS, IGW, ROUTING)  ---
   VPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -118,7 +117,6 @@ Resources:
   ManagementSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      # CORRIGIDO: Removidos os caracteres acentuados
       GroupDescription: "Permite acesso SSH a Instancia de Gerenciamento"
       VpcId: !Ref VPC
       SecurityGroupIngress:
@@ -133,7 +131,6 @@ Resources:
   ECSServiceSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
-      # CORRIGIDO: Removidos os caracteres acentuados
       GroupDescription: "Permite acesso a aplicacao rodando no ECS"
       VpcId: !Ref VPC
       SecurityGroupIngress:
@@ -151,12 +148,10 @@ Resources:
       GroupDescription: "Allows MySQL access from the ECS containers AND Management Instance"
       VpcId: !Ref VPC
       SecurityGroupIngress:
-        # Regra ORIGINAL: Permite acesso dos containers ECS
         - IpProtocol: tcp
           FromPort: 3306
           ToPort: 3306
           SourceSecurityGroupId: !GetAtt ECSServiceSecurityGroup.GroupId
-        # Regra NOVA: Permite acesso da Instância de Gerenciamento
         - IpProtocol: tcp
           FromPort: 3306
           ToPort: 3306
@@ -201,7 +196,7 @@ Resources:
         - Key: Name
           Value: !Sub ${AWS::StackName}-Database
 
-  # --- 4. INSTÂNCIA DE GERENCIAMENTO (BASTION HOST) ---
+  # --- 4. BASTION HOST ---
   ManagementInstance:
     Type: AWS::EC2::Instance
     Properties:
@@ -211,7 +206,7 @@ Resources:
       SecurityGroupIds:
         - !Ref ManagementSecurityGroup
       SubnetId: !Ref PublicSubnet
-      IamInstanceProfile: "LabInstanceProfile" # Perfil existente no AWS Academy
+      IamInstanceProfile: "LabInstanceProfile" # UNICO existente no AWS Academy
       UserData:
         Fn::Base64: !Sub |
           #!/bin/bash -xe
@@ -274,7 +269,7 @@ Resources:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub "/ecs/demand-tracker-task"
-      # Define a retenção dos logs para 7 dias para não acumular custos/dados indefinidamente
+      # retenção curta pra não consumir crédito
       RetentionInDays: 7
 
 Outputs:

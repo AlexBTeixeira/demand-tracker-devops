@@ -321,3 +321,4 @@ ci\ new\ version.yml
 # Jupyter Notebooks temporários
 .ipynb_checkpoints/
 *-checkpoint.ipynb
+
