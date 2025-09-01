@@ -170,16 +170,7 @@ def save_demand():
     except Exception as e:
         conn.rollback()
 
-        # ==========================================================
-        # == MODIFICAÇÃO PARA DEBUGGING - IMPRIMA O ERRO COMPLETO ==
-        # ==========================================================
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-        print("!!!!!!!!!!!!!!  ERRO CAPTURADO EM SAVE_DEMAND !!!!!!!!!!!!!!")
-        print(f"TIPO DE ERRO: {type(e)}")
-        print(f"MENSAGEM: {e}")
         traceback.print_exc()  # Isso imprime o stack trace completo no terminal
-        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-
         flash(f"Erro ao salvar demanda: {e}", "danger")
         redirect_url = url_for("demands.dashboard")
     finally:
