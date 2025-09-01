@@ -11,10 +11,6 @@ from blueprints.tracker import tracker_bp
 from config import Config
 from extensions import mysql
 
-# , login_manager,
-
-
-
 def create_app(config_class=Config):
     BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
