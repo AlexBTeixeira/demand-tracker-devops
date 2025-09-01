@@ -62,7 +62,6 @@ addopts = [
 ]
 markers = [
     "unit: marca testes unitários",
-    "integration: marca testes de integração",
     "slow: marca testes que demoram para executar"
 ]
 filterwarnings = [
