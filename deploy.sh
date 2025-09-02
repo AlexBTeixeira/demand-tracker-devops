@@ -1,9 +1,6 @@
-#!/bin/bash
-# deploy.sh (Versão final usando LabRole conforme documentação)
-
 set -e
 
-# --- PASSO 0: VERIFICAR O NOME DA STACK ---
+# pede o nome da stack ao inves de tentar descobrir (Role não funciona direito)
 if [ -z "$1" ]; then
     echo "ERRO: O nome da stack do CloudFormation não foi fornecido."
     echo "Uso: ./deploy.sh <NOME_DA_SUA_STACK>"
@@ -13,7 +10,7 @@ fi
 STACK_NAME=$1
 echo "Iniciando deploy para a stack: $STACK_NAME"
 
-# --- OBTENÇÃO DAS VARIÁVEIS ---
+# variáveis
 AWS_REGION="us-east-1"
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 ECR_REPOSITORY_URI=$(aws ecr describe-repositories --repository-names "${STACK_NAME}-repo" --query "repositories[0].repositoryUri" --output text)
@@ -23,30 +20,26 @@ ECS_TASK_DEFINITION_NAME="demand-tracker-task"
 S3_BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='S3BucketName'].OutputValue" --output text)
 DB_HOST=$(aws cloudformation describe-stacks --stack-name $STACK_NAME --query "Stacks[0].Outputs[?OutputKey=='RDSEndpoint'].OutputValue" --output text)
 
-# --- PASSO 1: ATUALIZAR O CÓDIGO FONTE ---
-echo "Atualizando o código-fonte do repositório..."
+
+echo "Atualizando o código-fonte do repo.."
 git pull
 
-# --- PASSO 2: BUILD E PUSH DA IMAGEM DOCKER ---
-echo "Fazendo login no Amazon ECR..."
+echo "Fazendo login no  ECR..."
 aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
 
-echo "Construindo a imagem Docker..."
+echo "Construindo a imagem..."
 IMAGE_TAG=$(date +%Y%m%d%H%M%S)
 docker build -t $ECR_REPOSITORY_URI .
 
-echo "Enviando a imagem para o ECR..."
+echo "Enviando para o ECR..."
 docker tag $ECR_REPOSITORY_URI:latest $ECR_REPOSITORY_URI:$IMAGE_TAG
 docker push $ECR_REPOSITORY_URI:$IMAGE_TAG
 docker push $ECR_REPOSITORY_URI:latest
 
-# --- PASSO 3: CRIAR/ATUALIZAR A TASK DEFINITION ---
 echo "Criando nova revisão da Task Definition (usando LabRole)..."
 DB_PASSWORD=$(cat /home/ec2-user/db_secret.txt)
 TASK_DEF_JSON_PATH="/home/ec2-user/app/task-definition.json"
 
-# --- A MUDANÇA CRÍTICA ESTÁ AQUI ---
-# Conforme a documentação do Learner Lab, devemos usar 'LabRole' para ambos os campos.
 ROLE_ARN="arn:aws:iam::${AWS_ACCOUNT_ID}:role/LabRole"
 
 # Gerar o arquivo JSON
@@ -94,7 +87,7 @@ EOF
 # Registra a nova definição de tarefa
 aws ecs register-task-definition --cli-input-json file://${TASK_DEF_JSON_PATH} > /dev/null
 
-# --- PASSO 4: CRIAR/ATUALIZAR O SERVIÇO ECS ---
+# Cria ou Atualiza o ECS
 echo "Verificando o serviço ECS..."
 SERVICE_EXISTS=$(aws ecs describe-services --cluster $ECS_CLUSTER_NAME --services $ECS_SERVICE_NAME --query "services[?status!='INACTIVE'] | length(@)")
 SUBNET_ID=$(aws ec2 describe-subnets --filters "Name=tag:Name,Values=${STACK_NAME}-PublicSubnet" --query "Subnets[0].SubnetId" --output text)

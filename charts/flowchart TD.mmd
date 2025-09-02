@@ -1,0 +1,121 @@
+---
+title: Demand Tracker - DevOps Pipeline & AWS Architecture
+---
+flowchart TD
+    %% Estilo das seções
+    classDef devSection fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
+    classDef ciSection fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef awsSection fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef storageSection fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
+    classDef networkSection fill:#fff9c4,stroke:#f9a825,stroke-width:2px
+    
+    %% SEÇÃO DESENVOLVIMENTO
+    subgraph DEV [" 💻 Development Environment"]
+        direction TB
+        PUSH[("🔄 Code Push<br/>main branch")]
+        PR[("🔀 Pull Request<br/>to main")]
+    end
+    
+    %% SEÇÃO CI/CD PIPELINE
+    subgraph CI [" 🚀 CI/CD Pipeline (GitHub Actions)"]
+        direction TB
+        TRIGGER{{"⚡ Trigger<br/>Push or PR"}}
+        CHECKOUT[("📥 1. Checkout<br/>Repository")]
+        PYTHON[("🐍 2. Setup<br/>Python 3.9")]
+        DEPS[("📦 3. Install<br/>Dependencies")]
+        LINT[("🔍 4. Flake8<br/>Code Analysis")]
+        TEST[("🧪 5. Pytest<br/>Unit Tests")]
+        
+        TRIGGER --> CHECKOUT
+        CHECKOUT --> PYTHON
+        PYTHON --> DEPS
+        DEPS --> LINT
+        LINT --> TEST
+    end
+    
+    %% SEÇÃO AWS INFRASTRUCTURE
+    subgraph AWS [" ☁️ AWS Infrastructure (CloudFormation)"]
+        direction TB
+        
+        %% Networking
+        subgraph NET [" 🌐 VPC Network"]
+            VPC[("🏢 VPC<br/>10.0.0.0/16")]
+            IGW[("🌍 Internet<br/>Gateway")]
+            PUB_SUB[("📡 Public Subnet<br/>10.0.1.0/24<br/>us-east-1a")]
+            PRIV_A[("🔒 Private Subnet A<br/>10.0.2.0/24<br/>us-east-1a")]
+            PRIV_B[("🔒 Private Subnet B<br/>10.0.3.0/24<br/>us-east-1b")]
+        end
+        
+        %% Security
+        subgraph SEC [" 🛡️ Security Groups"]
+            EC2_SG[("⚡ EC2 Security<br/>SSH:22 + App:5050")]
+            RDS_SG[("🗄️ RDS Security<br/>MySQL:3306")]
+        end
+        
+        %% Compute
+        subgraph COMP [" 💻 Compute"]
+            EC2[("🖥️ EC2 Instance<br/>t2.micro<br/>Amazon Linux 2")]
+        end
+        
+        %% Storage & Database
+        subgraph STOR [" 💾 Storage & Database"]
+            S3[("📁 S3 Bucket<br/>demand-tracker<br/>-attachments")]
+            RDS[("🗄️ RDS MySQL<br/>db.t3.micro<br/>demandtrackerdb")]
+        end
+    end
+    
+    %% APLICAÇÃO
+    subgraph APP [" 🌐 Application Stack"]
+        direction TB
+        FLASK[("🐍 Flask App<br/>wsgi.py")]
+        GUNICORN[("⚙️ Gunicorn<br/>Worker: 3<br/>Port: 5050")]
+        SYSTEMD[("🔄 Systemd<br/>Service")]
+    end
+    
+    %% CONEXÕES ENTRE SEÇÕES
+    DEV --> CI
+    PUSH --> TRIGGER
+    PR --> TRIGGER
+    
+    TEST --> |"✅ Success"| AWS
+    
+    %% CONEXÕES AWS INTERNAS
+    VPC -.-> PUB_SUB
+    VPC -.-> PRIV_A
+    VPC -.-> PRIV_B
+    IGW --> PUB_SUB
+    
+    EC2 --> PUB_SUB
+    RDS --> PRIV_A
+    RDS --> PRIV_B
+    
+    EC2_SG --> EC2
+    RDS_SG --> RDS
+    EC2_SG --> RDS_SG
+    
+    %% CONEXÕES DA APLICAÇÃO
+    EC2 --> APP
+    FLASK --> GUNICORN
+    GUNICORN --> SYSTEMD
+    
+    %% CONEXÕES DE DADOS
+    EC2 --> |"MySQL Connection"| RDS
+    EC2 --> |"File Upload"| S3
+    
+    %% ACESSO EXTERNO
+    INTERNET[("🌍 Internet<br/>Users")]
+    INTERNET --> |"HTTP:5050"| EC2
+    
+    %% Aplicar estilos
+    class DEV,PUSH,PR devSection
+    class CI,TRIGGER,CHECKOUT,PYTHON,DEPS,LINT,TEST ciSection
+    class AWS,NET,SEC,COMP awsSection
+    class STOR,S3,RDS storageSection
+    class VPC,IGW,PUB_SUB,PRIV_A,PRIV_B,EC2_SG,RDS_SG,EC2 networkSection
+    
+    %% Notas importantes
+    NOTE1[("💡 Deploy automatizado via<br/>UserData script<br/>GitHub PAT auth")]
+    NOTE2[("⚠️ Limitações AWS Academy:<br/>- Sem Secrets Manager<br/>- Perfil IAM fixo")]
+    
+    AWS -.-> NOTE1
+    AWS -.-> NOTE2

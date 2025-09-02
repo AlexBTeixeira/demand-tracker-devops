@@ -1,0 +1,228 @@
+---
+title: Demand Tracker - Fase 2 - Evolução para Containers & ECS Fargate
+---
+flowchart TD
+    %% Estilo das seções
+    classDef devSection fill:#e1f5fe,stroke:#0277bd,stroke-width:2px
+    classDef ciSection fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef cdSection fill:#fff8e1,stroke:#ff8f00,stroke-width:2px
+    classDef awsSection fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    classDef containerSection fill:#e8eaf6,stroke:#3f51b5,stroke-width:2px
+    classDef storageSection fill:#e8f5e8,stroke:#388e3c,stroke-width:2px
+    classDef networkSection fill:#fff9c4,stroke:#f9a825,stroke-width:2px
+    classDef securitySection fill:#fce4ec,stroke:#e91e63,stroke-width:2px
+    
+    %% SEÇÃO DESENVOLVIMENTO
+    subgraph DEV [" 💻 Development Environment"]
+        direction TB
+        PUSH[("🔄 Code Push<br/>main/develop")]
+        PR[("🔀 Pull Request<br/>to main/develop")]
+    end
+    
+    %% SEÇÃO CI PIPELINE AVANÇADO
+    subgraph CI [" 🚀 CI Pipeline V2 (GitHub Actions)"]
+        direction TB
+        
+        %% Trigger
+        TRIGGER{{"⚡ Trigger<br/>Push or PR"}}
+        
+        %% Setup Job
+        subgraph SETUP_JOB [" 📋 Setup & Cache"]
+            SETUP[("🔧 Setup Dependencies<br/>Python 3.9 + Cache")]
+            VENV[("🐍 Virtual Environment<br/>+ Pip Cache")]
+        end
+        
+        %% Parallel Jobs
+        subgraph PARALLEL [" ⚡ Parallel Quality Gates"]
+            direction LR
+            
+            subgraph SEC_JOB [" 🛡️ Security Analysis"]
+                SAFETY[("🔍 Safety Check<br/>Vulnerability Scan")]
+                BANDIT[("🚨 Bandit SAST<br/>Security Issues")]
+            end
+            
+            subgraph QUAL_JOB [" 📐 Code Quality"]
+                BLACK[("⚫ Black<br/>Code Formatting")]
+                ISORT[("📦 Isort<br/>Import Organization")]
+                FLAKE8[("🔍 Flake8<br/>Linting + Complexity")]
+            end
+            
+            subgraph TEST_JOB [" 🧪 Multi-Version Testing"]
+                PY38[("🐍 Python 3.8<br/>Tests + Coverage")]
+                PY39[("🐍 Python 3.9<br/>Tests + Coverage")]
+                PY310[("🐍 Python 3.10<br/>Tests + Coverage")]
+            end
+        end
+        
+        %% Build & Summary
+        BUILD[("🏗️ Build Application<br/>+ Docker Image")]
+        SUMMARY[("📊 CI Summary<br/>Quality Report")]
+        
+        %% Flow
+        TRIGGER --> SETUP_JOB
+        SETUP_JOB --> PARALLEL
+        PARALLEL --> BUILD
+        BUILD --> SUMMARY
+    end
+    
+    %% SEÇÃO CD PIPELINE
+    subgraph CD [" 🚚 CD Pipeline (Manual Trigger)"]
+        direction TB
+        CD_TRIGGER{{"✋ Manual Deploy<br/>from Management Instance"}}
+        
+        subgraph DEPLOY_STEPS [" 🔄 Deploy Automation"]
+            DOCKER_BUILD[("🐳 Docker Build<br/>Multi-stage Build")]
+            ECR_PUSH[("📤 ECR Push<br/>Container Registry")]
+            ECS_DEPLOY[("🚀 ECS Deploy<br/>Fargate Service")]
+            HEALTH_CHECK[("❤️ Health Check<br/>Application Ready")]
+        end
+        
+        CD_TRIGGER --> DEPLOY_STEPS
+    end
+    
+    %% SEÇÃO AWS INFRASTRUCTURE FASE 2
+    subgraph AWS [" ☁️ AWS Infrastructure - Fase 2 (CloudFormation)"]
+        direction TB
+        
+        %% Networking (mesmo da fase 1)
+        subgraph NET [" 🌐 VPC Network"]
+            VPC[("🏢 VPC<br/>10.0.0.0/16")]
+            IGW[("🌍 Internet<br/>Gateway")]
+            PUB_SUB[("📡 Public Subnet<br/>10.0.1.0/24<br/>us-east-1a")]
+            PRIV_A[("🔒 Private Subnet A<br/>10.0.2.0/24<br/>us-east-1a")]
+            PRIV_B[("🔒 Private Subnet B<br/>10.0.3.0/24<br/>us-east-1b")]
+        end
+        
+        %% Security Groups Evolution
+        subgraph SEC [" 🛡️ Security Groups"]
+            MGMT_SG[("🖥️ Management SG<br/>SSH:22")]
+            ECS_SG[("📦 ECS Service SG<br/>App:5050")]
+            RDS_SG[("🗄️ RDS Security<br/>MySQL:3306")]
+        end
+        
+        %% Container Infrastructure
+        subgraph CONTAINER [" 🐳 Container Platform"]
+            ECR[("📦 ECR Repository<br/>Container Registry<br/>Scan on Push")]
+            ECS_CLUSTER[("⚙️ ECS Cluster<br/>Fargate Mode")]
+            ECS_SERVICE[("🚀 ECS Service<br/>Auto Scaling<br/>Load Balanced")]
+            ALB[("⚖️ Application<br/>Load Balancer")]
+        end
+        
+        %% Management Layer
+        subgraph MGMT [" 🎛️ Management Layer"]
+            MGMT_INSTANCE[("🖥️ Management Instance<br/>t2.micro<br/>Docker + AWS CLI")]
+            LOGS[("📝 CloudWatch Logs<br/>ECS Log Groups")]
+        end
+        
+        %% Storage & Database (evolution)
+        subgraph STOR [" 💾 Storage & Database"]
+            S3[("📁 S3 Bucket<br/>demand-tracker<br/>-attachments")]
+            RDS[("🗄️ RDS MySQL<br/>db.t3.micro<br/>Multi-AZ Ready")]
+        end
+    end
+    
+    %% SEÇÃO APPLICATION ARCHITECTURE
+    subgraph APP [" 🏗️ Containerized Application"]
+        direction TB
+        
+        subgraph CONTAINER_STACK [" 📦 Container Stack"]
+            DOCKERFILE[("🐳 Multi-stage<br/>Dockerfile")]
+            FLASK_CONTAINER[("🐍 Flask App<br/>in Container")]
+            GUNICORN_CONTAINER[("⚙️ Gunicorn<br/>WSGI Server")]
+        end
+        
+        subgraph ORCHESTRATION [" 🎵 Orchestration"]
+            TASK_DEF[("📋 ECS Task<br/>Definition")]
+            FARGATE[("☁️ AWS Fargate<br/>Serverless Containers")]
+        end
+    end
+    
+    %% CONEXÕES PRINCIPAIS
+    DEV --> CI
+    PUSH --> TRIGGER
+    PR --> TRIGGER
+    
+    %% CI Flow
+    SETUP --> SAFETY
+    SETUP --> BLACK
+    SETUP --> PY38
+    VENV --> BANDIT
+    VENV --> ISORT
+    VENV --> PY39
+    VENV --> FLAKE8
+    VENV --> PY310
+    
+    %% CI to CD
+    SUMMARY --> |"✅ CI Success<br/>Manual Trigger"| CD
+    
+    %% CD Flow
+    DOCKER_BUILD --> ECR_PUSH
+    ECR_PUSH --> ECS_DEPLOY
+    ECS_DEPLOY --> HEALTH_CHECK
+    
+    %% AWS Internal Connections
+    VPC -.-> PUB_SUB
+    VPC -.-> PRIV_A
+    VPC -.-> PRIV_B
+    IGW --> PUB_SUB
+    
+    %% Security Groups
+    MGMT_SG --> MGMT_INSTANCE
+    ECS_SG --> ECS_SERVICE
+    RDS_SG --> RDS
+    ECS_SG --> RDS_SG
+    MGMT_SG --> RDS_SG
+    
+    %% Container Platform
+    ECR --> ECS_CLUSTER
+    ECS_CLUSTER --> ECS_SERVICE
+    ALB --> ECS_SERVICE
+    ECS_SERVICE --> LOGS
+    
+    %% Management to Infrastructure
+    MGMT_INSTANCE --> |"Docker Build & Push"| ECR
+    MGMT_INSTANCE --> |"ECS Deployment"| ECS_SERVICE
+    
+    %% Application Architecture
+    DOCKERFILE --> FLASK_CONTAINER
+    FLASK_CONTAINER --> GUNICORN_CONTAINER
+    TASK_DEF --> FARGATE
+    FARGATE --> ECS_SERVICE
+    
+    %% Data Connections
+    ECS_SERVICE --> |"MySQL Connection"| RDS
+    ECS_SERVICE --> |"File Upload"| S3
+    
+    %% External Access
+    INTERNET[("🌍 Internet<br/>Users")]
+    INTERNET --> |"HTTP/HTTPS"| ALB
+    ALB --> |"Health Checks"| ECS_SERVICE
+    
+    %% Deployment Connection
+    CD --> |"Execute via SSH"| MGMT_INSTANCE
+    
+    %% Aplicar estilos
+    class DEV,PUSH,PR devSection
+    class CI,TRIGGER,SETUP_JOB,SETUP,VENV ciSection
+    class PARALLEL,SEC_JOB,QUAL_JOB,TEST_JOB,BUILD,SUMMARY ciSection
+    class SAFETY,BANDIT securitySection
+    class BLACK,ISORT,FLAKE8,PY38,PY39,PY310 ciSection
+    class CD,CD_TRIGGER,DEPLOY_STEPS,DOCKER_BUILD,ECR_PUSH,ECS_DEPLOY,HEALTH_CHECK cdSection
+    class AWS,NET,MGMT awsSection
+    class CONTAINER,ECR,ECS_CLUSTER,ECS_SERVICE,ALB containerSection
+    class STOR,S3,RDS storageSection
+    class VPC,IGW,PUB_SUB,PRIV_A,PRIV_B networkSection
+    class SEC,MGMT_SG,ECS_SG,RDS_SG securitySection
+    class MGMT_INSTANCE,LOGS awsSection
+    class APP,CONTAINER_STACK,ORCHESTRATION,DOCKERFILE,FLASK_CONTAINER,GUNICORN_CONTAINER,TASK_DEF,FARGATE containerSection
+    
+    %% Notas importantes da Fase 2
+    NOTE1[("💡 Fase 2 Features:<br/>- Docker Multi-stage<br/>- ECS Fargate<br/>- Auto Scaling")]
+    NOTE2[("🔧 CI/CD V2:<br/>- SAST Security<br/>- Multi Python versions<br/>- Code Quality Gates")]
+    NOTE3[("⚠️ AWS Academy Workaround:<br/>- Management Instance<br/>- Manual CD Trigger<br/>- No IAM Role Creation")]
+    NOTE4[("📊 Quality Gates:<br/>- Security: Safety + Bandit<br/>- Code: Black + isort + Flake8<br/>- Tests: Multi-version + Coverage")]
+    
+    AWS -.-> NOTE1
+    CI -.-> NOTE2
+    CD -.-> NOTE3
+    PARALLEL -.-> NOTE4
